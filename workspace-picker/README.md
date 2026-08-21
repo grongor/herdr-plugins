@@ -247,7 +247,7 @@ herdr plugin unlink grongor.workspace-picker    # then: herdr plugin install ...
 herdr plugin uninstall grongor.workspace-picker # then: make link
 ```
 
-Config and state survive both.
+Config and state survive both. See [docs/authoring-plugins.md](../docs/authoring-plugins.md).
 
 ### Troubleshooting
 
