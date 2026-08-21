@@ -1,0 +1,36 @@
+id = "grongor.worktree-remover"
+name = "Worktree Remover"
+version = "0.1.0"
+# Needs popup panes with width/height, HERDR_PLUGIN_CONTEXT_JSON and `worktree remove --workspace`.
+min_herdr_version = "0.7.5"
+description = "Confirm removing a worktree checkout, with the option to delete its branch too"
+platforms = ["linux", "macos"]
+
+# Herdr shows this command and asks before running it, hence the inline `go build`. Only the command's existence is
+# checked: Go 1.21+ fetches the toolchain go.mod asks for; an older one fails the build and the fallback fetches a
+# throwaway toolchain into a temporary directory instead.
+[[build]]
+command = [
+  "sh",
+  "-c",
+  "command -v go >/dev/null 2>&1 && go build -trimpath -o bin/worktree-remover . || sh scripts/build-with-throwaway-go.sh",
+]
+
+# Actions run detached with no terminal, so this only opens the pane below.
+[[actions]]
+id = "remove"
+title = "Delete worktree checkout…"
+description = "Confirm deleting this workspace's worktree checkout, and optionally its branch"
+contexts = ["global", "workspace", "pane"]
+command = ["./bin/worktree-remover", "open-pane"]
+
+# A popup keeps the tiled layout untouched and gets every key, including Escape. Herdr kills this process with the
+# workspace it was opened from, so the removal itself runs in a detached child (see `apply` in main.go).
+[[panes]]
+id = "confirm"
+title = "Delete worktree checkout"
+placement = "popup"
+width = "60%"
+# Cells, not a percentage: the dialog is a fixed number of lines and 40% of a short terminal is too few.
+height = 18
+command = ["./bin/worktree-remover", "confirm"]

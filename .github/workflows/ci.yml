@@ -45,7 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        plugin: [workspace-picker]
+        plugin: [workspace-picker, worktree-remover]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7

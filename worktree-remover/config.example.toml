@@ -1,0 +1,7 @@
+# worktree-remover configuration. Every setting is optional. Install with:
+#   cp config.example.toml "$(herdr plugin config-dir grongor.worktree-remover)/config.toml"
+
+# Whether the "Delete the branch too" checkbox starts out ticked; "space" toggles it. A detached checkout has no branch,
+# so the box is cleared and inert. The branch is deleted with -D (unmerged too) after the checkout is gone; git keeps it
+# in the reflog. Default: true
+delete_branch = true
