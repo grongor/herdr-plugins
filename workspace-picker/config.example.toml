@@ -1,0 +1,27 @@
+# workspace-picker configuration. Every setting is optional. Install with:
+#   cp config.example.toml "$(herdr plugin config-dir grongor.workspace-picker)/config.toml"
+
+# Directories scanned for git repositories. "~" and $ENV_VARS are expanded; missing roots are skipped.
+# Default: whichever of ~/projects, ~/src, ~/code, ~/work, ~/dev, ~/git exist.
+roots = ["~/projects"]
+
+# Directory levels below each root searched for a repository. Scanning stops at a repository, so depth only costs
+# anything in directories holding none. Worktrees come from git metadata and are listed wherever they live. Default: 4
+max_depth = 4
+
+# Where ctrl-g proposes a new worktree for a repository with no worktrees to read a layout off yet. Repositories
+# that have some keep following the layout most of them already use, and the path is shown before anything is
+# created.
+#   "sibling"  <parent>/<repo>-<branch>, a checkout next to the repository
+#   "shared"   <parent>/<repo>-worktrees/<branch>, every checkout in one directory
+#   "herdr"    let Herdr choose, under the directory its [worktrees] config names
+# Default: sibling
+new_worktree_layout = "sibling"
+
+# Start with detached checkouts listed; "ctrl-t" toggles them for one run. A main checkout on a detached HEAD is always
+# listed, since hiding it would hide the repository. Default: false
+show_detached = false
+
+# Directory names never descended into; replaces the default list. Names starting with "." are always skipped.
+# Default: .cache, .venv, Library, __pycache__, build, dist, node_modules, target, vendor
+# ignore = ["node_modules", "vendor", "target"]

@@ -1,4 +1,4 @@
-PLUGINS :=
+PLUGINS := workspace-picker
 # shared is not a plugin but is vetted, gofmt-ed, tested and tidied like one.
 MODULES := shared $(PLUGINS)
 HERDR ?= herdr

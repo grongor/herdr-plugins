@@ -1,0 +1,34 @@
+id = "grongor.workspace-picker"
+name = "Workspace Picker"
+version = "0.1.0"
+# Needs popup panes with width/height and the global plugin registry.
+min_herdr_version = "0.7.5"
+description = "Pick a git repository or worktree and open it as a workspace"
+platforms = ["linux", "macos"]
+
+# Herdr shows this command and asks before running it, hence the inline `go build`. Only the command's existence is
+# checked: Go 1.21+ fetches the toolchain go.mod asks for; an older one fails the build and the fallback fetches a
+# throwaway toolchain into a temporary directory instead.
+[[build]]
+command = [
+  "sh",
+  "-c",
+  "command -v go >/dev/null 2>&1 && go build -trimpath -o bin/workspace-picker . || sh scripts/build-with-throwaway-go.sh",
+]
+
+# Actions run detached with no terminal, so this only opens the pane below.
+[[actions]]
+id = "open"
+title = "Open workspace picker"
+description = "Search git repositories and worktrees, then open one as a workspace"
+contexts = ["global", "workspace", "pane"]
+command = ["./bin/workspace-picker", "open-pane"]
+
+# A popup keeps the tiled layout untouched and gets every key, including Escape.
+[[panes]]
+id = "picker"
+title = "Workspace picker"
+placement = "popup"
+width = "70%"
+height = "60%"
+command = ["./bin/workspace-picker", "pick"]

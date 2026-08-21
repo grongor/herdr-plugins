@@ -15,8 +15,8 @@ permissions:
 
 jobs:
   check:
-        # Everything here must work on Linux and macOS, so both are built. fail-fast off: a break on one platform should
-    # still show whether the other broke too.
+    # Every manifest declares platforms = ["linux", "macos"], so both are built. fail-fast off: a break on one platform
+    # should still show whether the other broke too.
     strategy:
       fail-fast: false
       matrix:
@@ -38,3 +38,68 @@ jobs:
       - name: Modules are tidy
         run: make tidy-check
 
+  # The throwaway-toolchain branch of [[build]] is never exercised by hand and breaks silently (moved URL, renamed
+  # digest endpoint), so it runs here on both platforms with no Go set up and PATH scrubbed.
+  install-without-go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        plugin: [workspace-picker]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # No actions/setup-go. The image's preinstalled Go is removed from PATH by the directory `go` actually resolves
+      # to, not a guessed pattern: a scrub matching nothing would silently test the ordinary build path. GOROOT is unset
+      # too; left pointing at the image's Go it would override the unpacked toolchain.
+      - name: Remove Go from the environment
+        run: |
+          set -eu
+          while found=$(command -v go 2>/dev/null); do
+            dir=$(dirname "$found")
+            PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$dir" | paste -sd: -)
+            export PATH
+            echo "removed $dir from PATH"
+          done
+          {
+            echo "PATH=$PATH"
+            echo "GOROOT="
+            echo "GOTOOLCHAIN="
+          } >>"$GITHUB_ENV"
+
+      - name: No Go on PATH
+        run: |
+          if go version; then
+            echo "Go is still reachable, so this job would not test anything" >&2
+            exit 1
+          fi
+
+      # The command is read from the manifest, not repeated here, so this cannot pass while the real one is broken.
+      - name: Run the manifest's build command
+        working-directory: ${{ matrix.plugin }}
+        run: |
+          set -eu
+          python3 - <<'PY' >/tmp/build-command.sh
+          import tomllib
+          with open("herdr-plugin.toml", "rb") as fh:
+              build = tomllib.load(fh)["build"][0]["command"]
+          assert build[:2] == ["sh", "-c"], build
+          print(build[2])
+          PY
+          cat /tmp/build-command.sh
+          sh /tmp/build-command.sh
+
+      - name: The binary runs, and nothing was left behind
+        working-directory: ${{ matrix.plugin }}
+        run: |
+          set -eu
+          test -x "bin/${{ matrix.plugin }}"
+          # The UI needs a terminal; --help proves the binary links and runs on this platform.
+          "./bin/${{ matrix.plugin }}" --help
+          for leftover in "$HOME/go" "$HOME/.cache/go-build" "$HOME/Library/Caches/go-build" "$HOME/.config/go"; do
+            if [ -e "$leftover" ]; then
+              echo "the throwaway toolchain left $leftover behind" >&2
+              exit 1
+            fi
+          done
