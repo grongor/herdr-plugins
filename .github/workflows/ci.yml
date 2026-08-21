@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing useful survives a superseded push, and the matrix is several runners wide.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+        # Everything here must work on Linux and macOS, so both are built. fail-fast off: a break on one platform should
+    # still show whether the other broke too.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # go.mod pins a patch version (go 1.25.0); go-version-file treats it as a minimum, so a newer patch may run.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: shared/go.mod
+          cache-dependency-path: "*/go.sum"
+
+      # `make check` is the local definition of green, reused so CI and local runs cannot drift. make runs recipes under
+      # /bin/sh, so the gofmt pipeline does not depend on the runner's shell.
+      - run: make check TESTFLAGS=-race
+
+      - name: Modules are tidy
+        run: make tidy-check
+

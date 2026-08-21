@@ -1,0 +1,5 @@
+# Plugin binaries from [[build]] on `plugin install` or `make build`.
+bin/
+*.exe
+
+.DS_Store
