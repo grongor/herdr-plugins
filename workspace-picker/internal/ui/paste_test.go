@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/grongor/herdr-plugins/shared/newworktree"
 	"github.com/grongor/herdr-plugins/shared/tui"
 
 	"github.com/grongor/herdr-plugins/workspace-picker/internal/discover"
@@ -17,14 +18,13 @@ func TestPasteReachesTheDialog(t *testing.T) {
 		}},
 	})
 
-	picker.handle(tui.Key{Kind: tui.KeyCtrlG})
+	picker.handle(tui.Ctrl('g'))
 	if picker.form == nil {
 		t.Fatal("ctrl-g did not open the dialog")
 	}
-	picker.form.field = fieldBranch
 
 	var created bool
-	picker.actions = Actions{Create: func(Create) error {
+	picker.actions = Actions{Create: func(newworktree.Request) error {
 		created = true
 
 		return nil
@@ -42,7 +42,7 @@ func TestPasteReachesTheDialog(t *testing.T) {
 	if picker.form == nil {
 		t.Fatal("the paste closed the dialog")
 	}
-	if got := picker.form.branch.String(); got != "feature/PROJ-123" {
+	if got := picker.form.Request().Branch; got != "feature/PROJ-123" {
 		t.Fatalf("branch = %q, want the pasted name", got)
 	}
 }

@@ -3,10 +3,14 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/grongor/herdr-plugins/shared/git"
+	"github.com/grongor/herdr-plugins/shared/newworktree"
 	"github.com/grongor/herdr-plugins/shared/tui"
+	"github.com/grongor/herdr-plugins/shared/worktree"
 
-	"github.com/grongor/herdr-plugins/workspace-picker/internal/worktree"
+	"github.com/grongor/herdr-plugins/workspace-picker/internal/discover"
 )
 
 const (
@@ -18,28 +22,55 @@ const (
 	chromeHeight = 3
 	// firstRow is the screen line the list starts on; clicks on rows are resolved from it by arithmetic.
 	firstRow = 2
-	// formFieldsTop is the screen line of the first field: title, repository name, divider, blank.
-	formFieldsTop = 4
 	// Minimum gap between the label and the dimmed right column.
 	columnGap = 2
+
+	// fetchParallel bounds the repositories fetched at once: a hundred at a time is a hundred SSH connections.
+	fetchParallel = 8
 )
 
-var (
-	listHints = []tui.Hint{
+// zoneQuery is the click zone kind for the query itself; zero is the shared layer's "just the keystroke".
+const zoneQuery = 1
+
+// Keys is the list's shortcuts. A zero Key takes the default, so a caller may set only what it configures.
+type Keys struct {
+	NewWorktree tui.Key
+	Remote      tui.Key
+	Detached    tui.Key
+}
+
+var defaultKeys = Keys{NewWorktree: tui.Ctrl('g'), Remote: tui.Ctrl('r'), Detached: tui.Ctrl('t')}
+
+func (k Keys) withDefaults() Keys {
+	if k.NewWorktree.Kind == tui.KeyNone {
+		k.NewWorktree = defaultKeys.NewWorktree
+	}
+	if k.Remote.Kind == tui.KeyNone {
+		k.Remote = defaultKeys.Remote
+	}
+	if k.Detached.Kind == tui.KeyNone {
+		k.Detached = defaultKeys.Detached
+	}
+
+	return k
+}
+
+// hints is the footer; the remote toggle names what it would show next.
+func hints(keys Keys, showRemote bool) []tui.Hint {
+	remote := keys.Remote.String() + " remote"
+	if showRemote {
+		remote = keys.Remote.String() + " local only"
+	}
+
+	return []tui.Hint{
 		{Text: "enter open", Key: tui.Key{Kind: tui.KeyEnter}},
-		{Text: "ctrl-g new worktree", Key: tui.Key{Kind: tui.KeyCtrlG}},
-		{Text: "ctrl-t detached", Key: tui.Key{Kind: tui.KeyCtrlT}},
-		{Text: "ctrl-u clear", Key: tui.Key{Kind: tui.KeyCtrlU}},
+		{Text: keys.NewWorktree.String() + " new worktree", Key: keys.NewWorktree},
+		{Text: remote, Key: keys.Remote},
+		{Text: keys.Detached.String() + " detached", Key: keys.Detached},
+		{Text: "ctrl-u clear", Key: tui.Ctrl('u')},
 		{Text: "esc cancel", Key: tui.Key{Kind: tui.KeyEsc}},
 	}
-)
-
-// Zone kinds; zero is the shared layer's, a zone standing for the keystroke it carries.
-const (
-	zoneMode = iota + 1
-	zoneBase
-	zoneQuery
-)
+}
 
 // Options configures one run of the picker.
 type Options struct {
@@ -47,55 +78,107 @@ type Options struct {
 	Status string
 	// HerdrWorktreesDir is where Herdr places worktrees itself; used to recognise a Herdr-managed repository.
 	HerdrWorktreesDir string
-	// Layout is proposed for repositories whose existing checkouts imply nothing.
-	Layout worktree.Mode
+	// NewWorktree configures the dialog ctrl-g opens.
+	NewWorktree newworktree.Config
 	// ShowDetached is whether linked detached checkouts start out listed; ctrl-t flips it either way.
 	ShowDetached bool
+	// ShowRemote is whether remote branches start out listed, which fetches every repository; ctrl-r flips it either
+	// way.
+	ShowRemote bool
+	// Fetch bounds the fetch of one repository before its remote branches are listed; zero lists what is on disk.
+	Fetch time.Duration
+	// LoadRemote nil uses git; tests pass one to stay off the disk.
+	LoadRemote RemoteLoader
+	// Keys are the list's shortcuts; unset ones take the defaults.
+	Keys Keys
+}
+
+// RemoteLoader lists a repository's remote-tracking branches, newest commit first. It runs off the input loop; the
+// git-backed one fetches first, for at most fetch, and zero skips the fetch.
+type RemoteLoader func(dir string, fetch time.Duration) ([]string, error)
+
+// gitRemote lists even when the fetch failed: a repository with no network is normal, and the refs on disk still serve.
+func gitRemote(dir string, fetch time.Duration) ([]string, error) {
+	var failure error
+	if fetch > 0 {
+		failure = git.Fetch(dir, fetch)
+	}
+
+	_, remote, err := git.Branches(dir)
+	if err != nil && failure == nil {
+		failure = err
+	}
+
+	return remote, failure
 }
 
 // Actions are what the picker calls when the user commits. An error is shown and the surface stays open.
 type Actions struct {
-	Open func(row Row) error
-	// Create creates a new worktree and opens it.
-	Create func(req Create) error
+	Open   func(row Row) error
+	Create func(req newworktree.Request) error
 }
 
 // Run shows the picker and blocks until an action succeeds or the user cancels. Cancelling is not an error.
-func Run(rows []Row, opts Options, actions Actions) error {
-	picker := &pickerState{rows: rows, opts: opts, actions: actions, showDetached: opts.ShowDetached}
-	picker.refresh()
-
-	return tui.Run(picker)
+func Run(repos []discover.Repo, opts Options, actions Actions) error {
+	return tui.Run(newPicker(repos, opts, actions))
 }
+
+func newPicker(repos []discover.Repo, opts Options, actions Actions) *pickerState {
+	picker := &pickerState{
+		repos:   repos,
+		rows:    BuildRows(repos),
+		opts:    opts,
+		actions: actions,
+		show:    toggles{detached: opts.ShowDetached, remote: opts.ShowRemote},
+		// A goroutine holds its slot until its result is taken, so this many can be waiting on the next frame.
+		results: make(chan func(), fetchParallel),
+		wake:    make(chan struct{}, 1),
+	}
+	picker.refresh()
+	if picker.show.remote {
+		picker.startFetch()
+	}
+
+	return picker
+}
+
+// Wake is the repaint channel shared with the dialog, held by the picker because tui.Run reads it once, before any
+// dialog exists.
+func (s *pickerState) Wake() <-chan struct{} { return s.wake }
 
 // Handle routes one keystroke to whichever surface is on screen and reports whether the picker is done.
 func (s *pickerState) Handle(k tui.Key) bool {
-	if k.Kind == tui.KeyMouse {
-		synthesised, ok := s.click(k.Mouse)
-		if !ok {
-			return false
-		}
-		k = synthesised
-	}
+	s.drain()
 
+	// The dialog owns the whole pane while up, so it resolves its own clicks.
 	if s.form != nil {
-		switch s.form.handle(k) {
-		case actionQuit:
-			return true
-		case actionCancel:
-			s.form, s.zones = nil, nil
-		case actionSelect:
-			if err := s.actions.Create(s.form.request()); err != nil {
-				s.form.err = err.Error()
-
+		if k.Kind == tui.KeyMouse {
+			synthesised, ok := s.form.Click(k.Mouse)
+			if !ok {
 				return false
 			}
+			k = synthesised
+		}
 
+		switch s.form.Handle(k) {
+		case newworktree.ActionQuit, newworktree.ActionDone:
 			return true
-		case actionNone:
+		case newworktree.ActionCancel:
+			s.form = nil
+		case newworktree.ActionNone:
 		}
 
 		return false
+	}
+
+	if k.Kind == tui.KeyMouse {
+		synthesised, ok := s.click(k.Mouse)
+		if !ok {
+			s.prioritise()
+
+			return false
+		}
+		k = synthesised
 	}
 
 	switch s.handle(k) {
@@ -110,12 +193,16 @@ func (s *pickerState) Handle(k tui.Key) bool {
 
 		return true
 	case actionNone:
+		// The cursor may have moved onto a repository still waiting its turn.
+		s.prioritise()
 	}
 
 	return false
 }
 
 type pickerState struct {
+	// repos backs rows; rows are rebuilt from it as fetched remote branches arrive.
+	repos   []discover.Repo
 	rows    []Row
 	opts    Options
 	actions Actions
@@ -124,11 +211,21 @@ type pickerState struct {
 	cursor  int
 	offset  int
 	err     string
-	// showDetached: linked detached checkouts are mostly throwaways left by review tools and agents.
-	showDetached bool
+	show    toggles
+
+	// fetch is each repository's place in the fetch, nil until the first time remote branches are asked for: the fetch
+	// happens once per run however often they are hidden and shown again. running is how many are in flight.
+	fetch   []fetchState
+	running int
+	// failures counts the repositories whose fetch failed; failure is the first message, reported when the last lands.
+	failures int
+	failure  string
 
 	// form is the new-worktree dialog, non-nil while it is on screen.
-	form *form
+	form *newworktree.Form
+	// results carries closures from the fetch goroutines to the input loop, the only place the state is touched.
+	results chan func()
+	wake    chan struct{}
 	// zones is what the last frame put where, for resolving clicks. Cleared when the surface changes: one chunk of input
 	// can hold two events, and the first may have replaced what the second was aimed at.
 	zones tui.Zones
@@ -148,12 +245,167 @@ const (
 )
 
 func (s *pickerState) refresh() {
-	s.visible = filter(s.rows, s.query.String(), s.showDetached)
+	s.visible = filter(s.rows, s.query.String(), s.show)
 	s.cursor = 0
 	s.offset = 0
 	if len(s.visible) > 0 && !s.rows[s.visible[0].index].Targetable() {
 		s.move(1)
 	}
+}
+
+// relist refilters after the toggles changed, rebuilding the rows first when the repositories did, and keeps the
+// cursor on the row it was on when that row is still shown: a fetch landing must not send the cursor back to the top.
+func (s *pickerState) relist(rebuild bool) {
+	var at Row
+	held := s.cursor < len(s.visible)
+	if held {
+		at = s.rows[s.visible[s.cursor].index]
+	}
+
+	if rebuild {
+		s.rows = BuildRows(s.repos)
+	}
+	s.refresh()
+
+	if !held {
+		return
+	}
+	for i, v := range s.visible {
+		if s.rows[v.index].same(at) {
+			s.cursor = i
+
+			return
+		}
+	}
+}
+
+// same reports whether two rows, possibly from different builds of the list, name the same thing.
+func (r Row) same(o Row) bool {
+	return r.Repo == o.Repo && r.Remote == o.Remote && r.Label == o.Label
+}
+
+// post is called from the fetch goroutines; the wake send is dropped when one is already pending.
+func (s *pickerState) post(apply func()) {
+	s.results <- apply
+
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
+// drain runs at the top of every keystroke and frame, the only two moments the state is looked at.
+func (s *pickerState) drain() {
+	for {
+		select {
+		case apply := <-s.results:
+			apply()
+		default:
+			return
+		}
+	}
+}
+
+type fetchState uint8
+
+const (
+	fetchQueued fetchState = iota
+	fetchRunning
+	fetchDone
+)
+
+// startFetch queues every repository and starts the first few; the rest follow as slots free up, the repository under
+// the cursor always first.
+func (s *pickerState) startFetch() {
+	if s.fetch != nil {
+		return
+	}
+
+	s.fetch = make([]fetchState, len(s.repos))
+	s.pump()
+}
+
+// pump fills the free slots in list order, after the repository under the cursor.
+func (s *pickerState) pump() {
+	if s.fetch == nil {
+		return
+	}
+
+	s.prioritise()
+	for i := range s.fetch {
+		if s.running >= fetchParallel {
+			return
+		}
+		if s.fetch[i] == fetchQueued {
+			s.start(i)
+		}
+	}
+}
+
+// prioritise fetches the repository under the cursor at once when it is still waiting its turn, past the bound if need
+// be: it is the one whose branches are about to be wanted. Runs after every keystroke, so moving the cursor onto another
+// repository moves the fetch with it.
+func (s *pickerState) prioritise() {
+	if s.fetch == nil || s.cursor >= len(s.visible) {
+		return
+	}
+
+	if at := s.rows[s.visible[s.cursor].index].group; s.fetch[at] == fetchQueued {
+		s.start(at)
+	}
+}
+
+func (s *pickerState) start(index int) {
+	s.fetch[index] = fetchRunning
+	s.running++
+
+	load := s.opts.LoadRemote
+	if load == nil {
+		load = gitRemote
+	}
+
+	dir := s.repos[index].Anchor
+	if dir == "" {
+		dir = s.repos[index].CommonDir
+	}
+
+	go func() {
+		remote, err := load(dir, s.opts.Fetch)
+		s.post(func() { s.landed(index, remote, err) })
+	}()
+}
+
+// landed keeps whatever list came back with a failure and hands the slot on; the failures are reported once, when the
+// last one lands.
+func (s *pickerState) landed(index int, remote []string, err error) {
+	s.fetch[index] = fetchDone
+	s.running--
+	s.repos[index].Remote = remote
+	if err != nil {
+		s.failures++
+		if s.failure == "" {
+			s.failure = err.Error()
+		}
+	}
+
+	s.relist(true)
+	s.pump()
+
+	if s.pending() == 0 && s.failures > 0 {
+		s.err = fmt.Sprintf("fetch failed in %d of %d repositories: %s", s.failures, len(s.repos), s.failure)
+	}
+}
+
+// pending is the repositories queued or in flight.
+func (s *pickerState) pending() int {
+	count := 0
+	for _, state := range s.fetch {
+		if state != fetchDone {
+			count++
+		}
+	}
+
+	return count
 }
 
 func (s *pickerState) selected() *Row {
@@ -197,18 +449,44 @@ func (s *pickerState) move(delta int) {
 func (s *pickerState) handle(k tui.Key) action {
 	s.err = ""
 
+	// Shortcuts come before the editing keys: a shortcut put on ctrl-w is meant to win.
+	keys := s.opts.Keys.withDefaults()
+	switch {
+	case k.Is(keys.NewWorktree):
+		s.openForm()
+
+		return actionNone
+	case k.Is(keys.Remote):
+		s.show.remote = !s.show.remote
+		if s.show.remote {
+			s.startFetch()
+		}
+		s.relist(false)
+
+		return actionNone
+	case k.Is(keys.Detached):
+		s.show.detached = !s.show.detached
+		s.relist(false)
+
+		return actionNone
+	}
+
 	switch k.Kind {
 	case tui.KeyEnter:
-		if s.selected() != nil {
-			return actionSelect
+		row := s.selected()
+		if row == nil {
+			break
 		}
+		// A remote branch has nothing to open yet: the dialog gets it as the branch to check out, from itself.
+		if row.Remote != "" {
+			s.openFormAt(s.cursor, row.Branch())
+
+			break
+		}
+
+		return actionSelect
 	case tui.KeyEsc, tui.KeyCtrlC:
 		return actionCancel
-	case tui.KeyCtrlG:
-		s.openForm()
-	case tui.KeyCtrlT:
-		s.showDetached = !s.showDetached
-		s.refresh()
 	case tui.KeyUp:
 		s.move(-1)
 	case tui.KeyDown:
@@ -228,21 +506,65 @@ func (s *pickerState) handle(k tui.Key) action {
 	return actionNone
 }
 
-func (s *pickerState) openForm() { s.openFormAt(s.cursor) }
+func (s *pickerState) openForm() { s.openFormAt(s.cursor, "") }
 
-// openFormAt starts the dialog for one visible row; the checkout it names is the default base.
-func (s *pickerState) openFormAt(index int) {
+// openFormAt starts the dialog for one visible row; the checkout or remote branch it names is the default base, and
+// branch, when given, prefills the branch to create.
+func (s *pickerState) openFormAt(index int, branch string) {
 	if index < 0 || index >= len(s.visible) {
 		return
 	}
 
 	row := s.rows[s.visible[index].index]
-	layout := worktree.For(layoutRepo(row.Repo), s.opts.HerdrWorktreesDir, s.opts.Layout)
-	s.form, s.zones = newForm(row, layout), nil
+	s.form, s.zones = newworktree.New(newworktree.Options{
+		Repo:              dialogRepo(row.Repo),
+		Branch:            branch,
+		Base:              baseFor(row),
+		HerdrWorktreesDir: s.opts.HerdrWorktreesDir,
+		Config:            s.opts.NewWorktree,
+		Create:            s.actions.Create,
+		Wake:              s.wake,
+	}), nil
 }
 
-// click resolves a mouse report against the last frame. Cursor moves and field focus happen here; anything standing
-// for a keystroke comes back as that keystroke.
+// dialogRepo is the dialog's view of a discovered repository.
+func dialogRepo(repo *discover.Repo) newworktree.Repo {
+	linked := repo.Linked()
+
+	checkouts := make([]worktree.Checkout, 0, len(linked))
+	for _, checkout := range linked {
+		checkouts = append(checkouts, worktree.Checkout{Path: checkout.Path, Branch: checkout.Branch})
+	}
+
+	return newworktree.Repo{
+		Name:      repo.Name,
+		CommonDir: repo.CommonDir,
+		Anchor:    repo.Anchor,
+		Head:      repo.Head,
+		Checkouts: checkouts,
+	}
+}
+
+// baseFor is the default base the row offers. The main checkout is the repository's own HEAD, which the dialog is told
+// separately; a detached checkout offers its commit; a remote branch offers itself.
+func baseFor(row Row) string {
+	if row.Remote != "" {
+		return row.Remote
+	}
+
+	w := row.Worktree
+	if w == nil || w.Main {
+		return ""
+	}
+	if w.Branch != "" {
+		return w.Branch
+	}
+
+	return w.Head
+}
+
+// click resolves a mouse report against the last frame. Cursor moves happen here; anything standing for a keystroke
+// comes back as that keystroke.
 func (s *pickerState) click(m tui.Mouse) (tui.Key, bool) {
 	// Shift+mouse is the terminal's, for selecting text; Herdr's own mouse bindings leave it alone too.
 	if m.Shift || m.Release || m.Button == tui.MouseMiddle {
@@ -257,33 +579,16 @@ func (s *pickerState) click(m tui.Mouse) (tui.Key, bool) {
 	}
 
 	if target, ok := s.zones.At(m); ok {
-		switch target.Kind {
-		case zoneQuery:
+		if target.Kind == zoneQuery {
 			s.query.Cursor = s.query.Locate(target.To-target.From, m.Col-1-target.From)
-		case zoneMode:
-			s.form.field = fieldLayout
-			s.form.setMode(target.Index)
-		case zoneBase:
-			s.form.field = fieldBase
-			s.form.cycleBase(1)
-		default:
-			return target.Key, true
+
+			return tui.Key{}, false
 		}
 
-		return tui.Key{}, false
+		return target.Key, true
 	}
 
-	line := m.Row - 1
-
-	if s.form != nil {
-		if field := line - formFieldsTop; field >= 0 && field < fieldCount {
-			s.form.field = field
-		}
-
-		return tui.Key{}, false
-	}
-
-	if row := line - firstRow; row >= 0 && row < s.listHeight {
+	if row := m.Row - 1 - firstRow; row >= 0 && row < s.listHeight {
 		return s.clickRow(s.offset+row, m.Button)
 	}
 
@@ -303,7 +608,7 @@ func (s *pickerState) clickRow(index, button int) (tui.Key, bool) {
 
 	// Right-click is the mouse's ctrl-g; it works on a repository header too, where the cursor cannot rest.
 	if button == tui.MouseRight {
-		s.openFormAt(index)
+		s.openFormAt(index, "")
 
 		return tui.Key{}, false
 	}
@@ -326,10 +631,12 @@ func sign(n int) int {
 
 // Render draws whichever surface is on screen.
 func (s *pickerState) Render(sc *tui.Screen) {
+	s.drain()
+
 	width, height := sc.Width(), sc.Height()
 
 	if s.form != nil {
-		s.renderForm(sc, width, height)
+		s.form.Render(sc, width, height)
 
 		return
 	}
@@ -354,7 +661,7 @@ func (s *pickerState) Render(sc *tui.Screen) {
 		frame.Line(s.rowLine(sc, s.visible[index], index == s.cursor, width))
 	}
 
-	footer, zones := sc.Footer(s.err, listHints, height-1, width)
+	footer, zones := sc.Footer(s.err, hints(s.opts.Keys.withDefaults(), s.show.remote), height-1, width)
 	frame.Bottom(footer)
 	s.zones = append(s.zones, zones...)
 
@@ -364,6 +671,9 @@ func (s *pickerState) Render(sc *tui.Screen) {
 
 func (s *pickerState) counter() string {
 	counter := fmt.Sprintf("%d/%d", s.countVisible(), s.countRows())
+	if pending := s.pending(); pending > 0 {
+		counter = fmt.Sprintf("fetching %d/%d…  %s", len(s.repos)-pending, len(s.repos), counter)
+	}
 	if s.opts.Status != "" {
 		return s.opts.Status + "  " + counter
 	}
@@ -383,10 +693,12 @@ func (s *pickerState) countVisible() int {
 	return count
 }
 
+// countRows keeps counting hidden detached checkouts, the one on-screen sign there are any, but not hidden remote
+// branches: the footer already says ctrl-r lists them, and hundreds of them would swamp the count of checkouts.
 func (s *pickerState) countRows() int {
 	count := 0
 	for _, row := range s.rows {
-		if row.Targetable() {
+		if row.Targetable() && (row.Remote == "" || s.show.remote) {
 			count++
 		}
 	}

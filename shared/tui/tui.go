@@ -31,6 +31,14 @@ type App interface {
 	Handle(Key) bool
 }
 
+// Waker is an App whose screen can change without a keystroke: Run repaints every time Wake yields. A nil channel means
+// the app never repaints on its own.
+type Waker interface {
+	App
+	// Wake yields once per wanted repaint. Sends must not block: give it a buffer of one and drop sends that would block.
+	Wake() <-chan struct{}
+}
+
 // Run shows app and blocks until it says it is done or its input ends. Everything the terminal is put into is undone
 // before returning, including on a signal: a pane closed while a popup is up sends SIGHUP, which runs no deferred
 // function and would otherwise leave the host terminal in raw mode with mouse reporting on.
@@ -83,12 +91,20 @@ func Run(app App) error {
 	resized, stopResize := watchResize()
 	defer stopResize()
 
+	// A receive on a nil channel blocks forever, so the select is the same whether or not the app repaints on its own.
+	var woken <-chan struct{}
+	if waker, ok := app.(Waker); ok {
+		woken = waker.Wake()
+	}
+
 	for {
 		screen.measure()
 		app.Render(screen)
 
 		select {
 		case <-resized:
+			continue
+		case <-woken:
 			continue
 		case chunk, ok := <-input:
 			if !ok {

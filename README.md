@@ -7,6 +7,7 @@ Plugins for [Herdr](https://herdr.dev), the terminal workspace manager for AI co
 | Plugin | What it does |
 | --- | --- |
 | [workspace-picker](workspace-picker/) | Pick a git repository or one of its worktrees and open it as a workspace, or create a worktree in the layout that repository already uses |
+| [worktree-creator](worktree-creator/) | Create a worktree from a branch name or an issue reference, on a base picked from freshly fetched branches |
 | [worktree-remover](worktree-remover/) | Herdr's "delete worktree checkout?" dialog, with a checkbox that deletes the branch too |
 
 ## Install
@@ -15,6 +16,7 @@ Each plugin installs on its own:
 
 ```bash
 herdr plugin install grongor/herdr-plugins/workspace-picker
+herdr plugin install grongor/herdr-plugins/worktree-creator
 herdr plugin install grongor/herdr-plugins/worktree-remover
 ```
 
@@ -57,7 +59,8 @@ One directory per plugin, each with its own manifest and Go module, so `herdr pl
 grongor/herdr-plugins/<plugin>` installs exactly one thing.
 
 `shared/` is a module the plugins reach through `replace ../shared`: the terminal UI, the Herdr CLI wrapper, config
-loading and the manifest checks. Nothing installs it, but `make check` treats it as a plugin. See
+loading, the manifest checks, and the new-worktree dialog that both worktree-creator and workspace-picker open. Nothing
+installs it, but `make check` treats it as a plugin. See
 [docs/authoring-plugins.md](docs/authoring-plugins.md#the-shared-module).
 
 There is no `go.work` and one must never be committed: Herdr builds a single plugin from that plugin's own directory,

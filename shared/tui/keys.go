@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -20,11 +21,12 @@ const (
 	KeyEnter
 	KeyBackspace
 	KeyEsc
-	KeyCtrlU
-	KeyCtrlW
+	// KeyCtrlC is ctrl-c and ctrl-d: the cancel that works everywhere, so no shortcut can take it.
 	KeyCtrlC
-	KeyCtrlG
-	KeyCtrlT
+	// KeyCtrl is any other ctrl-letter, with Rune the lower-case letter; KeyAlt is alt with any printable ASCII rune.
+	// These are what the configurable shortcuts are made of.
+	KeyCtrl
+	KeyAlt
 	KeyLeft
 	KeyRight
 	KeyHome
@@ -44,13 +46,94 @@ const (
 	ModCtrl
 )
 
-// Key is one keystroke. Rune is set for KeyRune and Mouse for KeyMouse; both are zero otherwise. Mod is only ever set
-// on arrows, Home, End, Delete and the page keys.
+// Key is one keystroke. Rune is set for KeyRune, KeyCtrl and KeyAlt and Mouse for KeyMouse; both are zero otherwise.
+// Mod is only ever set on arrows, Home, End, Delete and the page keys.
 type Key struct {
 	Kind  KeyKind
 	Rune  rune
 	Mod   Mod
 	Mouse Mouse
+}
+
+// Ctrl is the ctrl-letter key.
+func Ctrl(letter rune) Key { return Key{Kind: KeyCtrl, Rune: letter} }
+
+// Alt is the alt-character key.
+func Alt(r rune) Key { return Key{Kind: KeyAlt, Rune: r} }
+
+// Is reports whether k is the keystroke other names; a Key with modifiers or a mouse report never is.
+func (k Key) Is(other Key) bool { return k.Kind == other.Kind && k.Rune == other.Rune && k.Mod == 0 }
+
+// String spells a key the way the footer hints and the config do: "ctrl-r", "alt-x", "enter".
+func (k Key) String() string {
+	switch k.Kind {
+	case KeyCtrl:
+		return "ctrl-" + string(k.Rune)
+	case KeyAlt:
+		return "alt-" + string(k.Rune)
+	case KeyCtrlC:
+		return "ctrl-c"
+	case KeyEnter:
+		return "enter"
+	case KeyEsc:
+		return "esc"
+	case KeyTab:
+		return "tab"
+	case KeyRune:
+		if k.Rune == ' ' {
+			return "space"
+		}
+
+		return string(k.Rune)
+	}
+
+	return "?"
+}
+
+// reservedCtrl are the ctrl-letters that mean something else at the terminal or in every field here, so a shortcut
+// cannot be put on them. The value says what the user would be taking away.
+var reservedCtrl = map[rune]string{
+	'a': "home",
+	'e': "end",
+	'c': "cancel",
+	'd': "cancel",
+	'h': "backspace",
+	'i': "tab",
+	'j': "enter",
+	'm': "enter",
+	'n': "down",
+	'p': "up",
+}
+
+// ParseKey reads a shortcut from the config: "ctrl-<letter>" or "alt-<character>", case-insensitive, "+" allowed for
+// "-". Letters the terminal or the line editor already own are refused with what they do.
+func ParseKey(text string) (Key, error) {
+	spelling := strings.ToLower(strings.TrimSpace(text))
+	modifier, rest, ok := strings.Cut(strings.NewReplacer("+", "-").Replace(spelling), "-")
+	if !ok || utf8.RuneCountInString(rest) != 1 {
+		return Key{}, fmt.Errorf("%q is not a shortcut such as \"ctrl-r\" or \"alt-x\"", text)
+	}
+	r, _ := utf8.DecodeRuneInString(rest)
+
+	switch modifier {
+	case "ctrl":
+		if r < 'a' || r > 'z' {
+			return Key{}, fmt.Errorf("%q: ctrl works with a letter", text)
+		}
+		if taken, reserved := reservedCtrl[r]; reserved {
+			return Key{}, fmt.Errorf("%q is %s and cannot be a shortcut", text, taken)
+		}
+
+		return Ctrl(r), nil
+	case "alt":
+		if r <= ' ' || r > '~' {
+			return Key{}, fmt.Errorf("%q: alt works with a printable ASCII character", text)
+		}
+
+		return Alt(r), nil
+	}
+
+	return Key{}, fmt.Errorf("%q is not a shortcut such as \"ctrl-r\" or \"alt-x\"", text)
 }
 
 // Mouse is one mouse report. Coordinates are 1-based terminal cells, as the terminal sends them.
@@ -222,18 +305,10 @@ func parseControl(b byte) (Key, bool) {
 		return Key{Kind: KeyBackspace}, true
 	case 0x03, 0x04: // ctrl-c, ctrl-d
 		return Key{Kind: KeyCtrlC}, true
-	case 0x15: // ctrl-u
-		return Key{Kind: KeyCtrlU}, true
-	case 0x17: // ctrl-w
-		return Key{Kind: KeyCtrlW}, true
 	case 0x0e: // ctrl-n
 		return Key{Kind: KeyDown}, true
 	case 0x10: // ctrl-p
 		return Key{Kind: KeyUp}, true
-	case 0x07: // ctrl-g
-		return Key{Kind: KeyCtrlG}, true
-	case 0x14: // ctrl-t
-		return Key{Kind: KeyCtrlT}, true
 	case 0x01: // ctrl-a
 		return Key{Kind: KeyHome}, true
 	case 0x05: // ctrl-e
@@ -242,18 +317,25 @@ func parseControl(b byte) (Key, bool) {
 		return Key{Kind: KeyTab}, true
 	}
 
+	// Every other ctrl-letter: 0x01 is ctrl-a. ESC (0x1b) went to parseEscape before this.
+	if b >= 0x01 && b <= 0x1a {
+		return Ctrl(rune('a' + b - 1)), true
+	}
+
 	return Key{}, false
 }
 
 // parseEscape decodes one CSI or SS3 sequence and reports how many bytes it consumed. ESC b / ESC f are what some
-// terminals send for alt-arrows.
+// terminals send for alt-arrows; ESC and any other printable character in one read is alt with that character.
 func parseEscape(buf []byte) (Key, int) {
 	if len(buf) >= 2 {
-		switch buf[1] {
-		case 'b':
+		switch b := buf[1]; {
+		case b == 'b':
 			return Key{Kind: KeyLeft, Mod: ModAlt}, 2
-		case 'f':
+		case b == 'f':
 			return Key{Kind: KeyRight, Mod: ModAlt}, 2
+		case b != '[' && b != 'O' && b > ' ' && b <= '~':
+			return Alt(rune(b)), 2
 		}
 	}
 	if len(buf) < 3 || (buf[1] != '[' && buf[1] != 'O') {

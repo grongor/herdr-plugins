@@ -1,15 +1,23 @@
 #!/bin/sh
 #
-# Build the plugin with a throwaway Go toolchain: fetch the latest release into a temp dir, build, delete it. Lets
+# Build a plugin with a throwaway Go toolchain: fetch the latest release into a temp dir, build, delete it. Lets
 # `plugin install` work on a machine with no Go (release binaries were rejected: a second, untested code path with a
-# version to keep in step). Download is ~64 MiB, unpacking to ~239 MiB plus a ~50 MiB build cache (GOCACHE=off has
-# been refused since Go 1.12). POSIX sh: nothing is known about the machine yet.
+# version to keep in step). Run from the plugin directory, where ../shared resolves like go.mod's `replace ../shared`:
+#
+#   sh ../shared/scripts/build-with-throwaway-go.sh [binary]
+#
+# The binary defaults to bin/<plugin directory name>. Download is ~64 MiB, unpacking to ~239 MiB plus a ~50 MiB build
+# cache (GOCACHE=off has been refused since Go 1.12). POSIX sh: nothing is known about the machine yet.
 
 set -eu
 
-# The plugin directory is derived from this script's location, so the build does not depend on the invoking cwd.
-plugin_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-binary=bin/workspace-picker
+# Herdr runs [[build]] in the plugin directory, so cwd is the plugin — not the shared directory this script lives in.
+plugin_dir=$(pwd)
+binary=${1:-bin/$(basename -- "$plugin_dir")}
+[ -f "${plugin_dir}/go.mod" ] || {
+	echo "build-with-throwaway-go: ${plugin_dir} has no go.mod; run this from a plugin directory" >&2
+	exit 1
+}
 
 fail() {
 	echo "build-with-throwaway-go: $*" >&2

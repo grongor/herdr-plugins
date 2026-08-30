@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -163,5 +164,33 @@ func write(t *testing.T, path, body string) {
 
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("writing %s: %v", path, err)
+	}
+}
+
+// TestBranchesOmitsRemoteHead pins that the symbolic origin/HEAD is not offered as a branch: %(refname:short) renders
+// it as a bare "origin", which used to slip past the /HEAD filter.
+func TestBranchesOmitsRemoteHead(t *testing.T) {
+	upstream := newRepo(t)
+	run(t, upstream, "branch", "feature")
+
+	dir := t.TempDir()
+	run(t, dir, "clone", "--quiet", upstream, ".")
+	if !HasRef(dir, "refs/remotes/origin/HEAD") {
+		t.Fatal("clone did not record origin/HEAD")
+	}
+
+	local, remote, err := Branches(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Join(local, ",") != "main" {
+		t.Errorf("local = %q, want [main]", local)
+	}
+
+	want := []string{"origin/feature", "origin/main"}
+	slices.Sort(remote)
+	if !slices.Equal(remote, want) {
+		t.Errorf("remote = %q, want %q", remote, want)
 	}
 }

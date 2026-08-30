@@ -50,10 +50,16 @@ func (e *LineEdit) Handle(k Key) bool {
 		e.Cursor = 0
 	case KeyEnd:
 		e.Cursor = len(e.Text)
-	case KeyCtrlW:
-		e.remove(e.wordStart(), e.Cursor)
-	case KeyCtrlU:
-		e.remove(0, e.Cursor)
+	case KeyCtrl:
+		// ctrl-w and ctrl-u are the line editor's; any other ctrl-letter is a shortcut the caller checks first.
+		switch k.Rune {
+		case 'w':
+			e.remove(e.wordStart(), e.Cursor)
+		case 'u':
+			e.remove(0, e.Cursor)
+		default:
+			return false
+		}
 	default:
 		return false
 	}

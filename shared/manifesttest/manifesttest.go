@@ -167,15 +167,16 @@ func noHooks(t *testing.T, meta toml.MetaData) {
 }
 
 // fallbackBuild pins that the no-Go fallback script writes the same binary as `go build -o`; a mismatch only shows up
-// for users without Go.
+// for users without Go. The script builds bin/<plugin directory> unless given a path argument.
 func fallbackBuild(t *testing.T, dir string, parsed Manifest) {
 	built := outputPath(t, parsed.Build[0].Command)
 
 	joined := strings.Join(parsed.Build[0].Command, " ")
-	script := regexp.MustCompile(`scripts/[\w.-]+\.sh`).FindString(joined)
-	if script == "" {
+	match := regexp.MustCompile(`(\S*scripts/[\w.-]+\.sh)(?:[ \t]+([^\s|&;]+))?`).FindStringSubmatch(joined)
+	if match == nil {
 		t.Fatalf("the [[build]] command %q names no fallback script", joined)
 	}
+	script, argument := match[1], match[2]
 	path := filepath.Join(dir, script)
 
 	info, err := os.Stat(path)
@@ -187,17 +188,16 @@ func fallbackBuild(t *testing.T, dir string, parsed Manifest) {
 		t.Errorf("%s is not executable (mode %v)", script, info.Mode().Perm())
 	}
 
-	source, err := os.ReadFile(path)
+	abs, err := filepath.Abs(dir)
 	if err != nil {
-		t.Fatalf("cannot read %s: %v", script, err)
+		t.Fatal(err)
 	}
-
-	assigned := regexp.MustCompile(`(?m)^binary=(\S+)`).FindSubmatch(source)
-	if assigned == nil {
-		t.Fatalf("%s has no `binary=` assignment to compare against [[build]]", script)
+	fallback := filepath.Join("bin", filepath.Base(abs))
+	if argument != "" {
+		fallback = filepath.Clean(argument)
 	}
-	if got := filepath.Clean(string(assigned[1])); got != built {
-		t.Errorf("%s builds %q, but [[build]] writes %q", script, got, built)
+	if fallback != built {
+		t.Errorf("the fallback script builds %q, but [[build]] writes %q", fallback, built)
 	}
 }
 

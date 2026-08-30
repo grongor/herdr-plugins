@@ -41,7 +41,7 @@ func TestForDetectsLayout(t *testing.T) {
 				{"/p/lorem-fix-issue", "fix-issue"}, {"/p/lorem-dev", "dev"},
 			}},
 			wantMode:  ModeSibling,
-			wantPath:  "/p/lorem-new-thing",
+			wantPath:  "/p/lorem-thing",
 			wantFound: true,
 		},
 		{
@@ -96,7 +96,7 @@ func TestForDetectsLayout(t *testing.T) {
 			name:      "no linked checkouts falls back",
 			repo:      Repo{Anchor: "/p/lorem"},
 			wantMode:  ModeSibling,
-			wantPath:  "/p/lorem-new-thing",
+			wantPath:  "/p/lorem-thing",
 			wantFound: false,
 		},
 		{
@@ -105,14 +105,14 @@ func TestForDetectsLayout(t *testing.T) {
 				{"/p/lorem-a", "a"}, {"/p/lorem-b", "b"}, {herdrDir + "/lorem/c", "c"},
 			}},
 			wantMode:  ModeSibling,
-			wantPath:  "/p/lorem-new-thing",
+			wantPath:  "/p/lorem-thing",
 			wantFound: true,
 		},
 		{
 			name:      "a lone detached checkout falls back",
 			repo:      Repo{Anchor: "/p/lorem", Checkouts: []Checkout{{"/tmp/scratch/abc1234", ""}}},
 			wantMode:  ModeSibling,
-			wantPath:  "/p/lorem-new-thing",
+			wantPath:  "/p/lorem-thing",
 			wantFound: false,
 		},
 		{

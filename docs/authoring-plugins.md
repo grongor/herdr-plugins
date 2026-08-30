@@ -161,7 +161,11 @@ The plugins here use the CLI, not the socket.
 | `shared/herdrcli` | the Herdr CLI calls, their JSON envelope, and the typed error carrying Herdr's error code |
 | `shared/plugin` | the `HERDR_*` runtime environment, including the invocation context |
 | `shared/config` | loading `$HERDR_PLUGIN_CONFIG_DIR/config.toml` into a plugin's own struct |
-| `shared/git` | reading a checkout's HEAD off disk, and deleting a branch |
+| `shared/git` | reading a checkout's HEAD off disk, listing branches, deleting a branch |
+| `shared/worktree` | reading a repository's worktrees and inferring its layout |
+| `shared/newworktree` | the new-worktree dialog both worktree-creator and workspace-picker open |
+| `shared/issue` | resolving an issue reference into a proposed branch name |
+| `shared/search` | the query matcher behind the picker and the branch list |
 | `shared/proc` | starting a subprocess that outlives the pane |
 | `shared/paths` | `~` expansion |
 | `shared/manifesttest` | the manifest checks every plugin's `manifest_test.go` runs |
@@ -202,8 +206,9 @@ committed root workspace silently joins that build. Measured on a two-module scr
 
 ### Adding a plugin
 
-1. `mkdir <plugin>` with `herdr-plugin.toml`, `README.md` and the code. Copy `scripts/build-with-throwaway-go.sh` from a
-   sibling and change the binary name in it.
+1. `mkdir <plugin>` with `herdr-plugin.toml`, `README.md` and the code. The `[[build]]` fallback is `sh
+   ../shared/scripts/build-with-throwaway-go.sh`, the same line as every sibling; it builds `bin/<plugin>` from the
+   directory it is run in.
 2. `go mod init github.com/grongor/herdr-plugins/<plugin>`, then add the shared module's `require` and `replace` lines.
 3. `manifest_test.go` is `manifesttest.Check(t, manifesttest.Dir(t), version)` — it covers the manifest, the build
    command, the fallback script and the dispatch switch.
@@ -311,11 +316,11 @@ Nothing here is published yet. To publish:
 6. **Document build dependencies — or remove them.** `[[build]]` runs on the user's machine and Herdr installs no
    toolchains, so a compiled plugin excludes everyone without that language. Prebuilt release binaries mean a release
    workflow, per-platform artifacts, checksums and a manifest version kept in step with a tag. The plugins here instead
-   fetch a throwaway toolchain at install time, each with its own copy of
-   [`scripts/build-with-throwaway-go.sh`](../workspace-picker/scripts/build-with-throwaway-go.sh): it always builds the
-   ref that was cloned, and the cost is bandwidth once. The cleanup is where that goes wrong: Go's module cache is
-   written read-only, so `rm -rf` alone cannot remove it; a signal trap that calls cleanup directly *returns* into a
-   script whose toolchain is gone, so signals should exit and leave the work to one `EXIT` trap; and telemetry ignores
+   fetch a throwaway toolchain at install time through one shared
+   [`shared/scripts/build-with-throwaway-go.sh`](../shared/scripts/build-with-throwaway-go.sh): it always builds the ref
+   that was cloned, and the cost is bandwidth once. The cleanup is where that goes wrong: Go's module cache is written
+   read-only, so `rm -rf` alone cannot remove it; a signal trap that calls cleanup directly *returns* into a script
+   whose toolchain is gone, so signals should exit and leave the work to one `EXIT` trap; and telemetry ignores
    `GOTELEMETRY` and `GOTELEMETRYDIR`, so `XDG_CONFIG_HOME` and `HOME` have to point at the throwaway directory.
 7. **Keep `[[build]]` self-contained.** A failing build aborts the install and registers nothing.
 8. **Do not mutate `herdr-plugin.toml` from a build command** — changing it after the install preview aborts the

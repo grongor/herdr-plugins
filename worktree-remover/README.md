@@ -70,7 +70,7 @@ git -C <repo> branch --delete --force -- <branch>
 compiled from the ref you cloned. With Go 1.25 or newer that is a plain `go build`. Without Go, the build fetches the
 current toolchain into a temporary directory, verifies it against the digest Google publishes beside it, builds, and
 deletes the toolchain and every cache again — see
-[`scripts/build-with-throwaway-go.sh`](scripts/build-with-throwaway-go.sh) and [workspace-picker's
+[`shared/scripts/build-with-throwaway-go.sh`](../shared/scripts/build-with-throwaway-go.sh) and [workspace-picker's
 README](../workspace-picker/README.md#about-the-build). A failing build aborts the install and registers nothing.
 
 ## Install

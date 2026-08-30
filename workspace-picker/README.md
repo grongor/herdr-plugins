@@ -9,7 +9,7 @@ worktrees nested underneath — and turns the one you choose into a Herdr worksp
 ❯ acme/storefront                                                                main
     └ feature/PROJ-2478-grpc-add-single-correction storefront-PROJ-2478-grpc-add-sin…
 
-enter open · ctrl-g new worktree · ctrl-t detached · ctrl-u clear · esc cancel
+enter open · ctrl-g new worktree · ctrl-r remote · ctrl-t detached · ctrl-u clear · esc cancel
 ```
 
 Every footer entry is clickable. The left column is the repository name (top level) or the branch (nested); the dimmed
@@ -27,6 +27,9 @@ and a repository lists its best matches first.
 `ctrl-g` — or a right click, on any row including a repository header — opens a dialog that creates a worktree in the
 repository the row belongs to and opens it as a workspace.
 
+It is the same dialog the [worktree-creator](../worktree-creator) plugin opens on a keybinding, drawn here instead of
+the list; what the picker adds is the starting point — the repository you narrowed down to, with the checkout the cursor
+was on as the base.
 
 ```
 New worktree
@@ -41,23 +44,29 @@ acme/storefront
 enter create · tab field · esc back
 ```
 
-Branch and path are text, with a caret: arrows, `home`/`end` and `ctrl-←`/`→` move it, and both can be left empty — an
-empty branch has Herdr generate a name, an empty path lets Herdr choose the location. Base and layout are choices, which
-is what `←/→` steps through there.
+Branch and path are text, with a caret: arrows, `home`/`end` and `ctrl-←`/`→` move it, and an empty path lets Herdr
+choose the location. Base and layout are choices, which is what `←/→` steps through there.
 
-The base starts as the checkout of the row you opened the dialog from. `←/→` swaps it for the repository's own `HEAD` —
-the branch its main checkout has out, or the default branch of a bare repository — and back. A detached checkout offers
-its commit instead of a branch name.
+The base starts as the checkout of the row you opened the dialog from. `←/→` steps through the rest: the repository's
+default branch as of the fetch the dialog just did, and its own `HEAD`. A detached checkout offers its commit instead of
+a branch name. `space` or typing opens the full branch list, filtered as you type, with `ctrl-r` showing and hiding
+remote-tracking branches; `enter` on a filter nothing matches uses what was typed, so a tag or a commit works too.
+
+Resolving an issue reference, seeding, and every setting are documented in [worktree-creator's
+README](../worktree-creator/README.md). Its config file is the one the dialog reads (`herdr plugin config-dir
+grongor.worktree-creator`); nothing about the dialog is configured here.
 
 The layout decides the path proposed for the branch you type. The starting layout is read off the worktrees the
 repository already has, so a repository keeps the convention it follows:
 
 | layout | path | recognised by |
 | --- | --- | --- |
-| `sibling` | `<parent>/<repo>-<branch>` | checkouts sitting next to the repository, named after it |
+| `sibling` | `<parent>/<repo>-<branch leaf>` | checkouts sitting next to the repository, named after it |
 | `shared` | `<dir>/<branch>` | checkouts sharing one directory of their own, the usual bare-repository setup |
 | `herdr` | Herdr's own worktrees directory | checkouts already under it |
 
+A sibling is named after the last segment of the branch — `fix/PROJ-1-retries` becomes `<repo>-PROJ-1-retries` — since
+it shares a directory listing with unrelated repositories. A shared directory keeps the whole branch.
 
 The shared directory is the deepest one every checkout sits under: a repository holding `main`, `proposal/di` and
 `fix/bug` shares the directory above all three, and gets `<dir>/fix/some-bug` for `fix/some-bug`. A checkout deeper than
@@ -66,11 +75,49 @@ Nothing is read back off a branch name, so a directory you named yourself is und
 
 Checkouts that disagree about the layout get the one most of them follow. A repository with a single worktree cannot say
 whether the directory above it is shared or part of the branch, so it is taken as shared — `←/→` corrects that in one
-keystroke. A repository with no worktrees gets [`new_worktree_layout`](config.example.toml), `sibling` by default. The
-proposed path is always on screen, and typing over it wins.
+keystroke. A repository with no worktrees gets [`layout`](../worktree-creator/config.example.toml) from
+worktree-creator's config, `sibling` by default. The proposed path is always on screen, and typing over it wins.
 
 A bare repository with no worktrees yet is listed too, showing `bare` and nothing under it. `enter` does nothing there,
 but `ctrl-g` creates the first one.
+
+## Remote branches
+
+The list starts out local: repositories and their checkouts. `ctrl-r` switches it to everything, which fetches every
+repository in the background — a few at a time, each bounded by worktree-creator's `fetch_timeout` — and nests each
+repository's remote branches under it as its fetch lands, tagged `remote`. The counter reads `fetching 3/12…` meanwhile,
+and the list stays usable throughout. Branches already checked out are not repeated; they are the checkout rows above.
+`ctrl-r` again hides them; showing them a second time does not fetch again, the refs are what they were a moment ago.
+
+The repository under the cursor is fetched first, and moving the cursor onto another one that is still waiting its turn
+fetches that one at once rather than in list order, so the branches you are after are never behind a hundred
+repositories you are not looking at.
+
+A query filters remote branches like everything else: `store` lists storefront's remote branches along with its
+checkouts, and `store 2590` or `2590` finds the branch.
+
+```
+❯ retry                                                                          2/214
+─────────────────────────────────────────────────────────────────────────────────────
+  acme/storefront                                                                main
+    ├ fix/PROJ-2568-retry-budget                    storefront-PROJ-2568-retry-budget
+❯   └ origin/feat/PROJ-2590-retry-metrics                                      remote
+
+enter open · ctrl-g new worktree · ctrl-r local only · ctrl-t detached · ctrl-u clear · esc cancel
+```
+
+`enter` on a remote branch has nothing to open yet, so it opens the new-worktree dialog with the branch filled in —
+`feat/PROJ-2590-retry-metrics`, based on `origin/feat/PROJ-2590-retry-metrics` — and a second `enter` creates the
+checkout and opens it. The dialog is there to be looked at: the path and layout are proposed as for any branch, and the
+name can still be changed. `ctrl-g` or a right click on a remote branch only offers it as the base, for a new branch
+starting from it.
+
+A repository whose fetch fails — no network, a dead remote — still lists the remote branches it last knew about, and the
+failures are summed up in one footer line once every fetch is done. Nothing is fetched until `ctrl-r` is pressed;
+[`show_remote_branches`](config.example.toml) starts the picker in the fetching state instead. The fetch is `git fetch
+--all --prune` with `fetch` and `fetch_timeout` from [worktree-creator's config](../worktree-creator/config.example.toml),
+the same settings the dialog fetches with, so `fetch = false` lists the refs already on disk without touching the
+network.
 
 ## Requirements
 
@@ -89,9 +136,9 @@ build has two paths:
 - **You have no Go, or one too old.** The build fetches the current Go toolchain into a temporary directory, verifies it
   against the digest Google publishes beside it, builds, and deletes the toolchain and every cache again, so the plugin
   binary is the only thing added to your machine. About 64 MiB downloaded and 300 MiB of temporary disk, once. See
-  [`scripts/build-with-throwaway-go.sh`](scripts/build-with-throwaway-go.sh). "Nothing left behind" is checked: CI runs
-  the script on both platforms with no Go installed, and it completes under a sandbox with the whole filesystem
-  read-only apart from its temporary directory and `bin/`.
+  [`shared/scripts/build-with-throwaway-go.sh`](../shared/scripts/build-with-throwaway-go.sh), one script for every
+  plugin here. "Nothing left behind" is checked: CI runs the script on both platforms with no Go installed, and it
+  completes under a sandbox with the whole filesystem read-only apart from its temporary directory and `bin/`.
 
 With Go 1.21 to 1.24, Go itself downloads the toolchain `go.mod` asks for and keeps it in your module cache — Go's own
 behaviour, not the plugin's.
@@ -120,7 +167,26 @@ roots = ["~/projects"]
 max_depth = 4
 ```
 
-See [config.example.toml](config.example.toml) for every setting. The config is read on each invocation.
+See [config.example.toml](config.example.toml) for every setting. The config is read on each invocation. The fetch
+behind `ctrl-r` is configured in worktree-creator's file, alongside the dialog's: `fetch` and `fetch_timeout`.
+
+### Shortcuts
+
+The three list shortcuts can be moved:
+
+```toml
+[keys]
+new_worktree = "ctrl-g"
+remote_branches = "ctrl-r"
+detached = "ctrl-t"
+```
+
+A key is `ctrl-` and a letter or `alt-` and any printable character (`alt-/` works). Letters the terminal or the query
+line already use are refused with what they do: `ctrl-a`/`e` (home/end), `ctrl-n`/`p` (down/up), `ctrl-c`/`d`, `ctrl-h`
+(backspace), `ctrl-i` (tab), `ctrl-j`/`m` (enter). Two actions on one key are refused too. A shortcut put on `ctrl-u` or
+`ctrl-w` takes the key from the query line. Everything else — enter, esc, tab, the arrows and the editing keys — stays
+where it is. The footer always shows the keys in effect. The dialog's own `ctrl-r` is set in [worktree-creator's
+config](../worktree-creator/config.example.toml), like the rest of the dialog.
 
 ## Bind a key
 
@@ -148,9 +214,10 @@ Without a keybinding: `herdr plugin action invoke grongor.workspace-picker.open`
 | `backspace`, `delete` | delete before or under the caret |
 | `ctrl-w` | delete the word before the caret |
 | `ctrl-u` | delete back to the start; from the end, the whole query |
-| `ctrl-g` | new worktree in the repository under the cursor |
-| `ctrl-t` | show or hide detached checkouts |
-| `enter` | open the highlighted checkout |
+| `ctrl-g` | new worktree in the repository under the cursor — [configurable](#shortcuts) |
+| `ctrl-r` | show or hide remote branches, fetching every repository the first time — configurable; in the dialog's branch list, the same for its bases |
+| `ctrl-t` | show or hide detached checkouts — configurable |
+| `enter` | open the highlighted checkout, or start a checkout of the highlighted remote branch |
 | `esc`, `ctrl-c` | cancel |
 
 ## Mouse
@@ -158,12 +225,12 @@ Without a keybinding: `herdr plugin action invoke grongor.workspace-picker.open`
 | Action | Result |
 | --- | --- |
 | click a row | move the cursor to it |
-| click the row the cursor is on | open it — a stray first click never opens a workspace |
+| click the row the cursor is on | open it — a stray first click never opens a workspace; on a remote branch, the dialog |
 | right-click a row | new worktree in that repository, header rows included |
 | click the query | put the caret there, without refiltering |
 | wheel | move between rows |
 | click a footer entry | the key it names |
-| click a field, a layout name, or the offered base | in the new-worktree dialog, choose it |
+| click a field, a layout name, or the offered base | in the new-worktree dialog, choose it — its [mouse table](../worktree-creator/README.md#mouse) has the rest |
 
 ## What it finds
 

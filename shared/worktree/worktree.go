@@ -116,10 +116,11 @@ func Switch(repo Repo, mode Mode) Layout {
 	}
 }
 
-// Path is the checkout path to create for branch; empty for ModeHerdr, which lets Herdr choose.
+// Path is the checkout path to create for branch; empty for ModeHerdr, which lets Herdr choose. A sibling uses only the
+// branch's last segment ("lorem-PROJ-2568", not "lorem-fix-PROJ-2568"), so "feat/x" and "fix/x" collide and git refuses
+// the second. A shared directory keeps the whole branch.
 func (l Layout) Path(branch string) string {
-	slug := Slug(branch)
-	if slug == "" || l.Mode == ModeHerdr {
+	if l.Mode == ModeHerdr || Slug(branch) == "" {
 		return ""
 	}
 
@@ -128,10 +129,19 @@ func (l Layout) Path(branch string) string {
 			return filepath.Join(append([]string{l.Dir}, branchSegments(branch)...)...)
 		}
 
-		return filepath.Join(l.Dir, slug)
+		return filepath.Join(l.Dir, Slug(branch))
 	}
 
-	return filepath.Join(l.Dir, l.Prefix+"-"+slug)
+	return filepath.Join(l.Dir, l.Prefix+"-"+Leaf(branch))
+}
+
+// Leaf is the slug of a branch's last segment.
+func Leaf(branch string) string {
+	if _, last, found := strings.Cut(branch, "/"); found {
+		return Leaf(last)
+	}
+
+	return Slug(branch)
 }
 
 // classify says which layout one checkout follows.

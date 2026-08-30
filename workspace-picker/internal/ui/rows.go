@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/grongor/herdr-plugins/shared/search"
 	"github.com/grongor/herdr-plugins/workspace-picker/internal/discover"
-	"github.com/grongor/herdr-plugins/workspace-picker/internal/search"
 )
 
 const (
@@ -14,14 +14,19 @@ const (
 	prefixLast  = "  └ "
 )
 
+// remoteMarker is the detail column of a remote-branch row, where a checkout shows its path.
+const remoteMarker = "remote"
+
 // pathPenalty divides the score of a term found only in a checkout's path.
 const pathPenalty = 2
 
-// Row is one line in the picker: a repository header, or a worktree indented under its repository.
+// Row is one line in the picker: a repository header, or a worktree or remote branch indented under its repository.
 type Row struct {
 	Repo *discover.Repo
-	// Worktree is nil for the header of a bare repository.
+	// Worktree is nil for the header of a bare repository and for a remote branch.
 	Worktree *discover.Worktree
+	// Remote is the remote-tracking branch a row offers to check out, "origin/topic"; such a row has no Worktree.
+	Remote string
 
 	// Prefix is the tree drawing prefix, empty for repository rows.
 	Prefix string
@@ -37,8 +42,18 @@ type Row struct {
 	group int
 }
 
-// Selectable reports whether Enter does anything on this row.
-func (r Row) Selectable() bool { return r.Worktree != nil }
+// Selectable reports whether Enter does anything on this row: a checkout opens, a remote branch gets a checkout.
+func (r Row) Selectable() bool { return r.Worktree != nil || r.Remote != "" }
+
+// Branch is the name a remote branch would be checked out under: "origin/topic" becomes "topic".
+func (r Row) Branch() string { return remoteBranch(r.Remote) }
+
+// remoteBranch strips the remote from a remote-tracking name; remote names cannot contain a slash.
+func remoteBranch(name string) string {
+	_, branch, _ := strings.Cut(name, "/")
+
+	return branch
+}
 
 // Targetable reports whether the cursor can rest here: selectable rows, plus the header of a bare repository with no
 // checkouts yet, where a new worktree can still be created.
@@ -70,17 +85,13 @@ func BuildRows(repos []discover.Repo) []Row {
 		}
 		rows = append(rows, header)
 
+		children := make([]Row, 0, len(worktrees)+len(repo.Remote))
 		for j := range worktrees {
-			prefix := prefixChild
-			if j == len(worktrees)-1 {
-				prefix = prefixLast
-			}
 			label := worktrees[j].Label()
 			detail := relativePath(base, worktrees[j].Path)
-			rows = append(rows, Row{
+			children = append(children, Row{
 				Repo:     repo,
 				Worktree: &worktrees[j],
-				Prefix:   prefix,
 				Label:    label,
 				Detail:   detail,
 				Match:    repo.Name + " " + label,
@@ -88,6 +99,33 @@ func BuildRows(repos []discover.Repo) []Row {
 				group:    i,
 			})
 		}
+
+		// A remote branch already checked out here is that checkout's row.
+		checkedOut := make(map[string]bool, len(repo.Worktrees))
+		for _, w := range repo.Worktrees {
+			checkedOut[w.Branch] = true
+		}
+		for _, name := range repo.Remote {
+			if checkedOut[remoteBranch(name)] {
+				continue
+			}
+			children = append(children, Row{
+				Repo:   repo,
+				Remote: name,
+				Label:  name,
+				Detail: remoteMarker,
+				Match:  repo.Name + " " + name,
+				group:  i,
+			})
+		}
+
+		for j := range children {
+			children[j].Prefix = prefixChild
+			if j == len(children)-1 {
+				children[j].Prefix = prefixLast
+			}
+		}
+		rows = append(rows, children...)
 	}
 
 	return rows
@@ -119,19 +157,29 @@ func (v visibleRow) prefix(rows []Row) string {
 	return rows[v.index].Prefix
 }
 
-// hidden reports whether the toggle keeps this row off screen. Only linked detached checkouts hide: hiding a main
+// toggles is what the two list toggles currently show.
+type toggles struct {
+	detached bool
+	remote   bool
+}
+
+// hidden reports whether a toggle keeps this row off screen. Only linked detached checkouts hide: hiding a main
 // checkout on a detached HEAD would hide the repository with it.
-func (r Row) hidden(showDetached bool) bool {
-	return !showDetached && r.Worktree != nil && r.Worktree.Detached && !r.Worktree.Main
+func (r Row) hidden(show toggles) bool {
+	if r.Remote != "" {
+		return !show.remote
+	}
+
+	return !show.detached && r.Worktree != nil && r.Worktree.Detached && !r.Worktree.Main
 }
 
 // filter narrows and ranks rows keeping the hierarchy intact: groups rank by their best-matching row, and a header
 // stays visible whenever any of its worktrees matched.
-func filter(rows []Row, query string, showDetached bool) []visibleRow {
+func filter(rows []Row, query string, show toggles) []visibleRow {
 	if strings.TrimSpace(query) == "" {
 		visible := make([]visibleRow, 0, len(rows))
 		for i := range rows {
-			if rows[i].hidden(showDetached) {
+			if rows[i].hidden(show) {
 				continue
 			}
 			visible = append(visible, visibleRow{index: i})
@@ -157,7 +205,7 @@ func filter(rows []Row, query string, showDetached bool) []visibleRow {
 			groups = append(groups, current)
 		}
 
-		if row.hidden(showDetached) {
+		if row.hidden(show) {
 			continue
 		}
 
@@ -197,13 +245,17 @@ func filter(rows []Row, query string, showDetached bool) []visibleRow {
 			highlights: highlight(rows[headerIndex].Label, query),
 		})
 
-		// Best match first, then by name.
+		// Checkouts before remote branches, each best match first, then by name.
 		sort.SliceStable(current.matched, func(i, j int) bool {
+			a, b := rows[current.matched[i].index], rows[current.matched[j].index]
+			if (a.Remote == "") != (b.Remote == "") {
+				return a.Remote == ""
+			}
 			if current.matched[i].score != current.matched[j].score {
 				return current.matched[i].score > current.matched[j].score
 			}
 
-			return rows[current.matched[i].index].Label < rows[current.matched[j].index].Label
+			return a.Label < b.Label
 		})
 		visible = append(visible, current.matched...)
 	}

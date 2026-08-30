@@ -1,0 +1,85 @@
+# worktree-creator configuration. Every setting is optional. Install with:
+#   cp config.example.toml "$(herdr plugin config-dir grongor.worktree-creator)/config.toml"
+#
+# The workspace picker's "ctrl-g" opens this same dialog and reads this same file, from this plugin's config directory.
+
+# Start with remote-tracking branches in the base list. "ctrl-r" toggles them for one run. Default: false
+show_remote_branches = false
+
+# Update remote-tracking refs (in the background) before offering a base, so "origin/main" is current. The workspace
+# picker's "ctrl-r" fetches every repository with these same two settings before listing remote branches. Default: true
+fetch = true
+
+# Give up on the fetch after this Go duration and offer the branches already on disk. Default: "5s"
+fetch_timeout = "5s"
+
+# Where a new worktree goes when the repository's existing checkouts do not already imply a layout. Default: "sibling"
+#   "sibling"  <parent>/<repo>-<branch>, named after the last branch segment ("fix/PROJ-1-thing" -> <repo>-PROJ-1-thing)
+#   "shared"   <parent>/<repo>-worktrees/<branch>
+#   "herdr"    under Herdr's [worktrees] directory; the path is chosen asynchronously, so the checkout cannot be seeded
+layout = "sibling"
+
+# Paths copied from the main checkout into a new one, relative to the checkout root. Missing ones are skipped; nothing
+# git already put there is overwritten. Setting this replaces the default list; an empty list turns seeding off.
+# Keep out ".idea/workspace.xml" (its ProjectId makes the IDE treat every worktree as one project), "*.iml" and
+# ".idea/modules.xml" (named after the directory, regenerated per checkout).
+# Default: .idea/codeStyles, .idea/inspectionProfiles, .idea/runConfigurations, .idea/go.imports.xml,
+#          .idea/golinter.xml, .idea/vcs.xml, .run
+# seed = [".idea/codeStyles", ".idea/runConfigurations", ".run"]
+
+# Turning an issue key or browse URL in the Branch field into a branch name: fetch_command prints the issue title,
+# propose_command prints a branch name, which lands back in the field to be edited and confirmed. Nothing runs unless a
+# reference is entered. Any setting left out keeps its default.
+#
+# Placeholders are replaced in every argument of both commands and also set in the environment:
+#   {key}            ISSUE_KEY             the issue key in key_case, "ticket-2568"
+#   {title}          ISSUE_TITLE           what fetch_command printed
+#   {prompt}         BRANCH_PROMPT         the rendered prompt
+#   {system_prompt}  BRANCH_SYSTEM_PROMPT  the system prompt
+#
+# The proposal used is the last output line that is a valid branch name and contains the issue key; anything else is
+# refused.
+[issue]
+
+# Recognise issue references at all. Off, the Branch field takes only a branch name. Default: true
+enabled = true
+
+# How the issue key is spelt in both commands and in the branch name, and so in the worktree's directory name: "lower"
+# or "upper". A key or URL is recognised in either case; a proposal that spells the key otherwise is respelt.
+# Default: "lower"
+key_case = "lower"
+
+# Prints the issue title on stdout. Runs with the key in $ISSUE_KEY and "{key}"; stdin is empty. Needs `jira`
+# (github.com/ankitpokhrel/jira-cli, after `jira init`) and `jq`.
+# Default: ["sh", "-c", "jira issue view \"$ISSUE_KEY\" --raw | jq -r '\"\\(.key): \\(.fields.summary)\"'"]
+# fetch_command = ["gh", "issue", "view", "{key}", "--json", "title", "-q", ".title"]
+
+# Prints the branch name on stdout; stdin is empty. The default runs claude with the cheapest model, no tools, no
+# extended thinking and no session left behind.
+# Default: ["env", "MAX_THINKING_TOKENS=0", "claude", "--model", "haiku", "--safe-mode", "--tools", "",
+#           "--no-session-persistence", "--system-prompt", "{system_prompt}", "-p", "{prompt}"]
+# propose_command = ["codex", "exec", "--model", "gpt-5-mini", "{system_prompt}\n\n{prompt}"]
+
+# Default: "You convert a Jira ticket title into a git branch name. Reply with the branch name and nothing else."
+# system_prompt = "You name git branches. Reply with the branch name and nothing else."
+
+# "{title}" is what fetch_command printed, "{key}" the issue key. The naming scheme is the prompt's business.
+# Default:
+#   Ticket: {title}
+#   Output a git branch name, format: <type>/<KEY>-<slug>. type = one of feat, fix, chore, refactor, docs, test, perf,
+#   ci - inferred from the title. KEY = {key}, exactly as written here, in this case. slug = kebab-case, 3-6 words from
+#   the title; do not repeat the type word in the slug. Output the branch name only: no backticks, no quotes, no
+#   explanation.
+# prompt = """
+# Ticket: {title}
+# Output a git branch name, format: {key}/<slug>, slug = 2-4 kebab-case words.
+# Output the branch name only.
+# """
+
+# The dialog's shortcuts. A key is "ctrl-" and a letter, or "alt-" and any printable character; "+" works for "-". Keys
+# the terminal or the text fields own are refused: ctrl-a/e (home/end), ctrl-n/p (down/up), ctrl-c/d, ctrl-h, ctrl-i,
+# ctrl-j/m. Applies wherever the dialog opens, the workspace picker included.
+[keys]
+
+# Show or hide remote-tracking branches, in the form and in its branch list. Default: "ctrl-r"
+remote_branches = "ctrl-r"

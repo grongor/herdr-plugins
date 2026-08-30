@@ -41,13 +41,13 @@ func TestLineEditOperations(t *testing.T) {
 		{"alt-left is ctrl-left", ref, len(ref), []Key{{Kind: KeyLeft, Mod: ModAlt}}, ref, 24},
 		{"ctrl-left twice lands before the number", "fix/TICKET-1-x", 14,
 			[]Key{{Kind: KeyLeft, Mod: ModCtrl}, {Kind: KeyLeft, Mod: ModCtrl}}, "fix/TICKET-1-x", 11},
-		{"ctrl-w drops the word before the cursor", "feature topic", 13, []Key{{Kind: KeyCtrlW}}, "feature ", 8},
-		{"ctrl-w crosses trailing spaces", "feature topic   ", 16, []Key{{Kind: KeyCtrlW}}, "feature ", 8},
-		{"ctrl-w on the only word", "topic", 5, []Key{{Kind: KeyCtrlW}}, "", 0},
-		{"ctrl-w on spaces alone", "   ", 3, []Key{{Kind: KeyCtrlW}}, "", 0},
-		{"ctrl-w mid-line keeps the rest", ref, 10, []Key{{Kind: KeyCtrlW}}, "fix/-2568-billing-dashboard", 4},
-		{"ctrl-u deletes back to the start", "abc/def", 4, []Key{{Kind: KeyCtrlU}}, "def", 0},
-		{"ctrl-u at the end clears", "abc", 3, []Key{{Kind: KeyCtrlU}}, "", 0},
+		{"ctrl-w drops the word before the cursor", "feature topic", 13, []Key{Ctrl('w')}, "feature ", 8},
+		{"ctrl-w crosses trailing spaces", "feature topic   ", 16, []Key{Ctrl('w')}, "feature ", 8},
+		{"ctrl-w on the only word", "topic", 5, []Key{Ctrl('w')}, "", 0},
+		{"ctrl-w on spaces alone", "   ", 3, []Key{Ctrl('w')}, "", 0},
+		{"ctrl-w mid-line keeps the rest", ref, 10, []Key{Ctrl('w')}, "fix/-2568-billing-dashboard", 4},
+		{"ctrl-u deletes back to the start", "abc/def", 4, []Key{Ctrl('u')}, "def", 0},
+		{"ctrl-u at the end clears", "abc", 3, []Key{Ctrl('u')}, "", 0},
 	}
 
 	for _, test := range tests {

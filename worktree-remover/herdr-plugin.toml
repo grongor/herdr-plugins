@@ -13,7 +13,7 @@ platforms = ["linux", "macos"]
 command = [
   "sh",
   "-c",
-  "command -v go >/dev/null 2>&1 && go build -trimpath -o bin/worktree-remover . || sh scripts/build-with-throwaway-go.sh",
+  "command -v go >/dev/null 2>&1 && go build -trimpath -o bin/worktree-remover . || sh ../shared/scripts/build-with-throwaway-go.sh",
 ]
 
 # Actions run detached with no terminal, so this only opens the pane below.

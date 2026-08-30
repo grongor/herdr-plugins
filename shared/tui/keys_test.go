@@ -1,6 +1,9 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Holding a lone ESC back for a sequence that never completes would leave Escape dead until the next keystroke.
 func TestLoneEscapeIsTheEscapeKey(t *testing.T) {
@@ -118,5 +121,65 @@ func TestSplitModifiedArrowIsFinished(t *testing.T) {
 
 	if len(keys) != 1 || keys[0] != (Key{Kind: KeyLeft, Mod: ModCtrl}) {
 		t.Fatalf("decoded %+v, want ctrl-left", keys)
+	}
+}
+
+// TestAnyCtrlOrAltLetterDecodes pins that every ctrl-letter not spoken for arrives as KeyCtrl with its letter, that ESC
+// and a character in one read is alt with that character, and that a lone ESC is still Escape.
+func TestAnyCtrlOrAltLetterDecodes(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		in   []byte
+		want Key
+	}{
+		{"ctrl-x", []byte{0x18}, Ctrl('x')},
+		{"ctrl-u", []byte{0x15}, Ctrl('u')},
+		{"ctrl-n is down", []byte{0x0e}, Key{Kind: KeyDown}},
+		{"ctrl-c is cancel", []byte{0x03}, Key{Kind: KeyCtrlC}},
+		{"alt-x", []byte{0x1b, 'x'}, Alt('x')},
+		{"alt-b is alt-left", []byte{0x1b, 'b'}, Key{Kind: KeyLeft, Mod: ModAlt}},
+		{"lone esc", []byte{0x1b}, Key{Kind: KeyEsc}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			keys := (&Decoder{}).Keys(test.in)
+			if len(keys) != 1 || keys[0] != test.want {
+				t.Fatalf("decoded %+v, want %+v", keys, test.want)
+			}
+		})
+	}
+}
+
+func TestParseKey(t *testing.T) {
+	for _, test := range []struct {
+		in   string
+		want Key
+		err  string
+	}{
+		{"ctrl-r", Ctrl('r'), ""},
+		{" Ctrl+X ", Ctrl('x'), ""},
+		{"alt-/", Alt('/'), ""},
+		{"ctrl-a", Key{}, "is home"},
+		{"ctrl-m", Key{}, "is enter"},
+		{"ctrl-1", Key{}, "ctrl works with a letter"},
+		{"alt-é", Key{}, "printable ASCII"},
+		{"shift-r", Key{}, "is not a shortcut"},
+		{"r", Key{}, "is not a shortcut"},
+	} {
+		t.Run(test.in, func(t *testing.T) {
+			key, err := ParseKey(test.in)
+			if test.err != "" {
+				if err == nil || !strings.Contains(err.Error(), test.err) {
+					t.Fatalf("error = %v, want %q", err, test.err)
+				}
+
+				return
+			}
+			if err != nil || key != test.want {
+				t.Fatalf("ParseKey = %+v, %v; want %+v", key, err, test.want)
+			}
+			if got, _ := ParseKey(key.String()); got != key {
+				t.Fatalf("String() = %q does not parse back", key.String())
+			}
+		})
 	}
 }

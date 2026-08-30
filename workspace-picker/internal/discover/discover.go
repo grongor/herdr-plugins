@@ -49,6 +49,9 @@ type Repo struct {
 	Head string
 	// Worktrees is the main worktree (if any) first, then linked worktrees by branch.
 	Worktrees []Worktree
+	// Remote is the remote-tracking branches, newest commit first, once the picker has fetched them. Discovery reads
+	// nothing but metadata and leaves it empty.
+	Remote []string
 }
 
 // Linked returns the linked checkouts without the main one.

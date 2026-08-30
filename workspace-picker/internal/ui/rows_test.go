@@ -93,7 +93,7 @@ func TestDetachedCheckoutsHideBehindTheToggle(t *testing.T) {
 		t.Errorf("countVisible = %d, want 2", got)
 	}
 
-	picker.handle(tui.Key{Kind: tui.KeyCtrlT})
+	picker.handle(tui.Ctrl('t'))
 	if got := labels(); len(got) != 3 {
 		t.Fatalf("shown view = %v, want all three rows", got)
 	}
@@ -101,7 +101,7 @@ func TestDetachedCheckoutsHideBehindTheToggle(t *testing.T) {
 		t.Errorf("the first child draws %q again, want %q", got, prefixChild)
 	}
 
-	picker.handle(tui.Key{Kind: tui.KeyCtrlT})
+	picker.handle(tui.Ctrl('t'))
 	if got := labels(); len(got) != 2 {
 		t.Fatalf("re-hidden view = %v, want two rows", got)
 	}
@@ -189,12 +189,12 @@ func TestCursorReachesEmptyBareRepo(t *testing.T) {
 		t.Errorf("countRows = %d, want 1", picker.countRows())
 	}
 
-	picker.handle(tui.Key{Kind: tui.KeyCtrlG})
+	picker.handle(tui.Ctrl('g'))
 	if picker.form == nil {
 		t.Fatal("ctrl-g did not open the dialog")
 	}
-	if picker.form.repo.Name != "org/lonely" {
-		t.Errorf("dialog repo = %q, want org/lonely", picker.form.repo.Name)
+	if picker.form.Request().Repo.Name != "org/lonely" {
+		t.Errorf("dialog repo = %q, want org/lonely", picker.form.Request().Repo.Name)
 	}
 }
 
@@ -214,7 +214,7 @@ func TestQueryRanksPathHitsLast(t *testing.T) {
 	}
 	rows := BuildRows([]discover.Repo{repo})
 
-	visible := filter(rows, "kabal 2811", false)
+	visible := filter(rows, "kabal 2811", toggles{})
 	got := make([]string, 0, len(visible))
 	for _, v := range visible {
 		got = append(got, rows[v.index].Label)

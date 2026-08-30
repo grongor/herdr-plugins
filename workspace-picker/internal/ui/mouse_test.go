@@ -50,7 +50,7 @@ func clickable(t *testing.T, repos []discover.Repo) (*pickerState, int) {
 	picker.refresh()
 	picker.listHeight = height - chromeHeight
 
-	_, hints := (&tui.Screen{}).HintLine(listHints, height-1, 80)
+	_, hints := (&tui.Screen{}).HintLine(hints(defaultKeys, false), height-1, 80)
 	picker.zones = hints
 
 	return picker, height
@@ -94,8 +94,8 @@ func TestRightClickOpensTheDialog(t *testing.T) {
 	if picker.form == nil {
 		t.Fatal("right-clicking the header did not open the dialog")
 	}
-	if picker.form.repo.Name != "org/bared" {
-		t.Fatalf("dialog repo = %q, want org/bared", picker.form.repo.Name)
+	if picker.form.Request().Repo.Name != "org/bared" {
+		t.Fatalf("dialog repo = %q, want org/bared", picker.form.Request().Repo.Name)
 	}
 }
 
@@ -108,10 +108,10 @@ func TestClickingTheHintRunsIt(t *testing.T) {
 	})
 
 	// "enter open · ctrl-g new worktree" — land inside the second entry.
-	col := tui.Cells(listHints[0].Text) + tui.Cells(tui.HintSep) + 2
+	col := tui.Cells(hints(defaultKeys, false)[0].Text) + tui.Cells(tui.HintSep) + 2
 
 	k, ok := picker.click(tui.Mouse{Button: tui.MouseLeft, Col: col, Row: height})
-	if !ok || k.Kind != tui.KeyCtrlG {
+	if !ok || !k.Is(tui.Ctrl('g')) {
 		t.Fatalf("hint click = %+v (%v), want ctrl-g", k, ok)
 	}
 }
@@ -189,14 +189,14 @@ func TestOpeningTheDialogDropsStaleZones(t *testing.T) {
 	})
 
 	col := 1
-	for _, item := range listHints {
+	for _, item := range hints(defaultKeys, false) {
 		if item.Key.Kind == tui.KeyEsc {
 			break
 		}
 		col += tui.Cells(item.Text) + tui.Cells(tui.HintSep)
 	}
 
-	picker.handle(tui.Key{Kind: tui.KeyCtrlG})
+	picker.handle(tui.Ctrl('g'))
 	if picker.form == nil {
 		t.Fatal("ctrl-g did not open the dialog")
 	}
@@ -206,31 +206,6 @@ func TestOpeningTheDialogDropsStaleZones(t *testing.T) {
 	}
 	if picker.form == nil {
 		t.Fatal("the stale hint cancelled the dialog it was drawn under")
-	}
-}
-
-// TestClickFocusesADialogField pins the dialog's half of the arithmetic.
-func TestClickFocusesADialogField(t *testing.T) {
-	picker, _ := clickable(t, []discover.Repo{
-		{Name: "org/a", Anchor: "/p/a", Head: "main", Worktrees: []discover.Worktree{
-			{Path: "/p/a", Branch: "main", Main: true},
-		}},
-	})
-
-	picker.handle(tui.Key{Kind: tui.KeyCtrlG})
-
-	if _, ok := picker.click(tui.Mouse{Button: tui.MouseLeft, Col: 20, Row: formFieldsTop + fieldPath + 1}); ok {
-		t.Fatal("focusing a field stood for a keystroke")
-	}
-	if picker.form.field != fieldPath {
-		t.Fatalf("field = %d, want %d", picker.form.field, fieldPath)
-	}
-
-	// The lines above the fields and the error below them name no field.
-	picker.click(tui.Mouse{Button: tui.MouseLeft, Col: 20, Row: 1})
-	picker.click(tui.Mouse{Button: tui.MouseLeft, Col: 20, Row: formFieldsTop + fieldCount + 1})
-	if picker.form.field != fieldPath {
-		t.Fatalf("field = %d, want it left on %d", picker.form.field, fieldPath)
 	}
 }
 

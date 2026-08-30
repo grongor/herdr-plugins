@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/grongor/herdr-plugins/shared/herdrcli"
+	"github.com/grongor/herdr-plugins/shared/newworktree"
 	"github.com/grongor/herdr-plugins/shared/plugin"
 
 	"github.com/grongor/herdr-plugins/workspace-picker/internal/config"
@@ -66,38 +67,53 @@ func runPick() error {
 		return err
 	}
 
-	rows, err := rowsFor(cfg)
+	repos, err := reposFor(cfg)
+	if err != nil {
+		return err
+	}
+
+	// The ctrl-g dialog is the worktree-creator's and reads that plugin's config, whichever plugin opens it. Its fetch
+	// settings also govern the fetch behind ctrl-r, so one file says how long a repository may take.
+	dialog, _, err := newworktree.LoadConfig()
 	if err != nil {
 		return err
 	}
 
 	options := ui.Options{
 		HerdrWorktreesDir: herdrcli.WorktreesDir(),
-		Layout:            cfg.Layout(),
+		NewWorktree:       dialog,
 		ShowDetached:      cfg.ShowDetached,
+		ShowRemote:        cfg.ShowRemoteBranches,
+		Fetch:             dialog.FetchFor(),
+		Keys: ui.Keys{
+			NewWorktree: cfg.Shortcuts.NewWorktree,
+			Remote:      cfg.Shortcuts.RemoteBranches,
+			Detached:    cfg.Shortcuts.Detached,
+		},
 	}
 
-	return ui.Run(rows, options, ui.Actions{
+	return ui.Run(repos, options, ui.Actions{
 		Open: func(row ui.Row) error {
 			_, err := herdrcli.OpenCheckout(row.Repo.CommonDir, row.Worktree.Path)
 
 			return err
 		},
-		Create: func(req ui.Create) error {
-			_, err := herdrcli.CreateWorktree(req.Repo.CommonDir, req.Branch, req.Base, req.Path)
-
-			return err
-		},
+		Create: newworktree.Creator{Seed: dialog.SeedPaths()}.Create,
 	})
 }
 
 func runList() error {
-	rows, err := load()
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	for _, row := range rows {
+	repos, err := reposFor(cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, row := range ui.BuildRows(repos) {
 		kind := "bare"
 		path := ""
 		if row.Worktree != nil {
@@ -113,20 +129,11 @@ func runList() error {
 	return nil
 }
 
-func load() ([]ui.Row, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-
-	return rowsFor(cfg)
-}
-
-func rowsFor(cfg *config.Config) ([]ui.Row, error) {
+func reposFor(cfg *config.Config) ([]discover.Repo, error) {
 	repos := discover.Scan(cfg)
 	if len(repos) == 0 {
 		return nil, fmt.Errorf("no git repositories found under %s", strings.Join(cfg.Roots, ", "))
 	}
 
-	return ui.BuildRows(repos), nil
+	return repos, nil
 }

@@ -1,4 +1,4 @@
-PLUGINS := workspace-picker worktree-remover
+PLUGINS := workspace-picker worktree-creator worktree-remover
 # shared is not a plugin but is vetted, gofmt-ed, tested and tidied like one.
 MODULES := shared $(PLUGINS)
 HERDR ?= herdr
@@ -28,7 +28,7 @@ build:
 build-without-go:
 	@for plugin in $(PLUGINS); do \
 		echo "==> $$plugin (no toolchain)"; \
-		(cd $$plugin && sh scripts/build-with-throwaway-go.sh) || exit 1; \
+		(cd $$plugin && sh ../shared/scripts/build-with-throwaway-go.sh) || exit 1; \
 	done
 
 check:

@@ -1,0 +1,35 @@
+id = "grongor.worktree-creator"
+name = "Worktree Creator"
+version = "0.1.0"
+# Needs popup panes with width/height, HERDR_PLUGIN_CONTEXT_JSON and `worktree open --path`.
+min_herdr_version = "0.7.5"
+description = "Create a worktree from a branch name or an issue reference, on a base you pick"
+platforms = ["linux", "macos"]
+
+# Herdr shows this command and asks before running it, hence the inline `go build`. Only the command's existence is
+# checked: Go 1.21+ fetches the toolchain go.mod asks for; an older one fails the build and the fallback fetches a
+# throwaway toolchain into a temporary directory instead.
+[[build]]
+command = [
+  "sh",
+  "-c",
+  "command -v go >/dev/null 2>&1 && go build -trimpath -o bin/worktree-creator . || sh ../shared/scripts/build-with-throwaway-go.sh",
+]
+
+# Actions run detached with no terminal, so this only opens the pane below.
+[[actions]]
+id = "create"
+title = "New worktree…"
+description = "Create a worktree from a branch name or an issue reference, on a base you pick"
+contexts = ["global", "workspace", "pane"]
+command = ["./bin/worktree-creator", "open-pane"]
+
+# A popup keeps the tiled layout untouched and gets every key, including Escape.
+[[panes]]
+id = "dialog"
+title = "New worktree"
+placement = "popup"
+width = "70%"
+# Room for the branch list the base field opens.
+height = "60%"
+command = ["./bin/worktree-creator", "dialog"]
