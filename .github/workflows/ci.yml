@@ -1,14 +1,16 @@
 name: CI
 
+# PR branches run via pull_request only, not push.
 on:
   push:
     branches: [main]
+    tags: ["**"]
   pull_request:
 
-# Nothing useful survives a superseded push, and the matrix is several runners wide.
+# Cancel superseded PR runs only; main and tag runs always finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -20,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-26.04, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -44,26 +46,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-26.04, macos-26]
         plugin: [workspace-picker, worktree-creator, worktree-remover]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
-      # No actions/setup-go. The image's preinstalled Go is removed from PATH by the directory `go` actually resolves
-      # to, not a guessed pattern: a scrub matching nothing would silently test the ordinary build path. GOROOT is unset
-      # too; left pointing at the image's Go it would override the unpacked toolchain.
+      # Delete the image's Go wherever `go` resolves (on ubuntu that is /usr/bin, so PATH cannot be scrubbed). GOROOT
+      # is unset too, or it would override the unpacked toolchain.
       - name: Remove Go from the environment
         run: |
           set -eu
           while found=$(command -v go 2>/dev/null); do
-            dir=$(dirname "$found")
-            PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$dir" | paste -sd: -)
-            export PATH
-            echo "removed $dir from PATH"
+            sudo rm -f "$found"
+            hash -r
+            if [ -e "$found" ]; then
+              echo "could not remove $found" >&2
+              exit 1
+            fi
+            echo "removed $found"
           done
           {
-            echo "PATH=$PATH"
             echo "GOROOT="
             echo "GOTOOLCHAIN="
           } >>"$GITHUB_ENV"
