@@ -1,6 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":semanticCommits",
+    "helpers:pinGitHubActionDigests",
+    "group:all",
+    "schedule:weekly"
+  ],
+  "timezone": "Europe/Prague",
+  "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
+  "minimumReleaseAge": "3 days",
+  "osvVulnerabilityAlerts": true,
+  "packageRules": [
+    {
+      "matchPackageNames": ["*"],
+      "semanticCommitType": "chore"
+    }
   ]
 }
