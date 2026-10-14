@@ -130,7 +130,11 @@ func newRepo(t *testing.T) string {
 		t.Skip("git is not installed")
 	}
 
-	dir := t.TempDir()
+	// git reports resolved paths; macOS temp dirs sit behind a symlink.
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	run(t, dir, "init", "--initial-branch=main", ".")
 	run(t, dir, "config", "user.email", "test@example.com")
 	run(t, dir, "config", "user.name", "Test")

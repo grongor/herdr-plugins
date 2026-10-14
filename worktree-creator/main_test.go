@@ -84,7 +84,19 @@ func repoWithWorktree(t *testing.T) (main, linked string) {
 		t.Skip("git is not installed")
 	}
 
-	main = t.TempDir()
+	// git reports resolved paths; macOS temp dirs sit behind a symlink.
+	tempDir := func() string {
+		t.Helper()
+
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return dir
+	}
+
+	main = tempDir()
 	git := func(args ...string) {
 		t.Helper()
 
@@ -100,7 +112,7 @@ func repoWithWorktree(t *testing.T) (main, linked string) {
 	git("config", "commit.gpgsign", "false")
 	git("commit", "--allow-empty", "-m", "first")
 
-	linked = filepath.Join(t.TempDir(), "topic")
+	linked = filepath.Join(tempDir(), "topic")
 	git("worktree", "add", "-b", "topic", linked)
 
 	return main, linked
