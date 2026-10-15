@@ -299,7 +299,7 @@ pluginlab`. Deleting before the stop has settled can leave the entry and its ser
 
 - **Herdr's own agent skill** teaches an agent to *operate* Herdr from inside a managed pane: `npx skills add
   ogulcancelik/herdr --skill herdr -g`. It refuses to act unless `HERDR_ENV=1`.
-- **[`.claude/skills/herdr-plugin-dev`](../.claude/skills/herdr-plugin-dev/SKILL.md)** is the extension side: the
+- **[`.agents/skills/herdr-plugin-dev`](../.agents/skills/herdr-plugin-dev/SKILL.md)** is the extension side: the
   manifest contract, the runtime environment, and the build/link/invoke/log loop.
 
 ## Publishing
