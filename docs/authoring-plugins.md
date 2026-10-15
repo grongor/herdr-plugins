@@ -206,7 +206,7 @@ committed root workspace silently joins that build. Measured on a two-module scr
 
 ### Adding a plugin
 
-1. `mkdir <plugin>` with `herdr-plugin.toml`, `README.md` and the code. The `[[build]]` fallback is `sh
+1. `mkdir <plugin>` with `herdr-plugin.toml`, `README.md`, `CHANGELOG.md` and the code. The `[[build]]` fallback is `sh
    ../shared/scripts/build-with-throwaway-go.sh`, the same line as every sibling; it builds `bin/<plugin>` from the
    directory it is run in.
 2. `go mod init github.com/grongor/herdr-plugins/<plugin>`, then add the shared module's `require` and `replace` lines.
@@ -326,6 +326,8 @@ Nothing here is published yet. To publish:
 8. **Do not mutate `herdr-plugin.toml` from a build command** — changing it after the install preview aborts the
    install.
 9. **Version each plugin independently.** There is no `plugin update`; users reinstall, optionally pinned with `--ref`.
+   Installs track `main`, so every merge is a release: a user-facing change bumps the plugin's version and adds that
+   version's section to its `CHANGELOG.md` in the same PR.
 
 Users installing from GitHub see the source and every command that will run before confirming, so keep the manifest
 readable.

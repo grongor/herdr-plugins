@@ -50,7 +50,7 @@ func clickable(t *testing.T, repos []discover.Repo) (*pickerState, int) {
 	picker.refresh()
 	picker.listHeight = height - chromeHeight
 
-	_, hints := (&tui.Screen{}).HintLine(hints(defaultKeys, false), height-1, 80)
+	_, hints := (&tui.Screen{}).HintLine(hints(defaultKeys, false, false), height-1, 80)
 	picker.zones = hints
 
 	return picker, height
@@ -108,7 +108,7 @@ func TestClickingTheHintRunsIt(t *testing.T) {
 	})
 
 	// "enter open · ctrl-g new worktree" — land inside the second entry.
-	col := tui.Cells(hints(defaultKeys, false)[0].Text) + tui.Cells(tui.HintSep) + 2
+	col := tui.Cells(hints(defaultKeys, false, false)[0].Text) + tui.Cells(tui.HintSep) + 2
 
 	k, ok := picker.click(tui.Mouse{Button: tui.MouseLeft, Col: col, Row: height})
 	if !ok || !k.Is(tui.Ctrl('g')) {
@@ -189,7 +189,7 @@ func TestOpeningTheDialogDropsStaleZones(t *testing.T) {
 	})
 
 	col := 1
-	for _, item := range hints(defaultKeys, false) {
+	for _, item := range hints(defaultKeys, false, false) {
 		if item.Key.Kind == tui.KeyEsc {
 			break
 		}

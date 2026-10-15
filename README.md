@@ -6,7 +6,7 @@ Plugins for [Herdr](https://herdr.dev), the terminal workspace manager for AI co
 
 | Plugin | What it does |
 | --- | --- |
-| [workspace-picker](workspace-picker/) | Pick a git repository or one of its worktrees and open it as a workspace, or create a worktree in the layout that repository already uses |
+| [workspace-picker](workspace-picker/) | Pick a git repository or one of its worktrees — or any folder, by path — and open it as a workspace, or create a worktree in the layout that repository already uses |
 | [worktree-creator](worktree-creator/) | Create a worktree from a branch name or an issue reference, on a base picked from freshly fetched branches |
 | [worktree-remover](worktree-remover/) | Herdr's "delete worktree checkout?" dialog, with a checkbox that deletes the branch too |
 
@@ -22,6 +22,9 @@ herdr plugin install grongor/herdr-plugins/worktree-remover
 
 Herdr clones the repository, runs that plugin's `[[build]]` commands, and registers it globally for your user. See the
 plugin's README for configuration and keybindings.
+
+There is no `herdr plugin update`: to update, run the install again, optionally pinned with `--ref`. Each plugin's
+`CHANGELOG.md` lists what changed between versions.
 
 ## Develop
 

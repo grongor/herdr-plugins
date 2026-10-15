@@ -81,21 +81,25 @@ type OpenResult struct {
 }
 
 // OpenCheckout opens a git checkout as a focused worktree-aware workspace, focusing an existing one rather than
-// duplicating it. Repositories Herdr does not recognise as worktrees fall back to a plain workspace. The fallback must
-// not pass --json: `workspace create` rejects the flag with exit 2 on 0.7.5, 0.8.0 and 0.8.2 (the envelope is printed
-// regardless).
+// duplicating it. Repositories Herdr does not recognise as worktrees fall back to a plain workspace.
 func OpenCheckout(commonDir, checkout string) (OpenResult, error) {
 	result, err := run("worktree", "open", "--cwd", commonDir, "--path", checkout, "--focus", "--json")
 	if err == nil {
 		return result, nil
 	}
 
-	fallback, fallbackErr := run("workspace", "create", "--cwd", checkout, "--focus")
+	fallback, fallbackErr := OpenDirectory(checkout)
 	if fallbackErr != nil {
 		return OpenResult{}, fmt.Errorf("%w (workspace create also failed: %w)", err, fallbackErr)
 	}
 
 	return fallback, nil
+}
+
+// OpenDirectory opens any directory as a focused plain workspace. It must not pass --json: `workspace create` rejects
+// the flag with exit 2 on 0.7.5, 0.8.0 and 0.8.2 (the envelope is printed regardless).
+func OpenDirectory(dir string) (OpenResult, error) {
+	return run("workspace", "create", "--cwd", dir, "--focus")
 }
 
 // CreateWorktree creates a checkout and opens it as a focused workspace. Empty branch, base and path are omitted and

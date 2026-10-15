@@ -37,9 +37,10 @@ type Keys struct {
 	NewWorktree tui.Key
 	Remote      tui.Key
 	Detached    tui.Key
+	Folder      tui.Key
 }
 
-var defaultKeys = Keys{NewWorktree: tui.Ctrl('g'), Remote: tui.Ctrl('r'), Detached: tui.Ctrl('t')}
+var defaultKeys = Keys{NewWorktree: tui.Ctrl('g'), Remote: tui.Ctrl('r'), Detached: tui.Ctrl('t'), Folder: tui.Ctrl('o')}
 
 func (k Keys) withDefaults() Keys {
 	if k.NewWorktree.Kind == tui.KeyNone {
@@ -51,25 +52,37 @@ func (k Keys) withDefaults() Keys {
 	if k.Detached.Kind == tui.KeyNone {
 		k.Detached = defaultKeys.Detached
 	}
+	if k.Folder.Kind == tui.KeyNone {
+		k.Folder = defaultKeys.Folder
+	}
 
 	return k
 }
 
-// hints is the footer; the remote toggle names what it would show next.
-func hints(keys Keys, showRemote bool) []tui.Hint {
+// hints is the footer; the toggles name what they would show next.
+func hints(keys Keys, showRemote, browsing bool) []tui.Hint {
 	remote := keys.Remote.String() + " remote"
 	if showRemote {
 		remote = keys.Remote.String() + " local only"
 	}
+	folder := keys.Folder.String() + " folder"
+	if browsing {
+		folder = keys.Folder.String() + " projects"
+	}
 
-	return []tui.Hint{
-		{Text: "enter open", Key: tui.Key{Kind: tui.KeyEnter}},
+	items := []tui.Hint{{Text: "enter open", Key: tui.Key{Kind: tui.KeyEnter}}}
+	if browsing {
+		items = append(items, tui.Hint{Text: "tab complete", Key: tui.Key{Kind: tui.KeyTab}})
+	}
+
+	return append(items, []tui.Hint{
 		{Text: keys.NewWorktree.String() + " new worktree", Key: keys.NewWorktree},
 		{Text: remote, Key: keys.Remote},
 		{Text: keys.Detached.String() + " detached", Key: keys.Detached},
+		{Text: folder, Key: keys.Folder},
 		{Text: "ctrl-u clear", Key: tui.Ctrl('u')},
 		{Text: "esc cancel", Key: tui.Key{Kind: tui.KeyEsc}},
-	}
+	}...)
 }
 
 // Options configures one run of the picker.
@@ -91,6 +104,8 @@ type Options struct {
 	LoadRemote RemoteLoader
 	// Keys are the list's shortcuts; unset ones take the defaults.
 	Keys Keys
+	// Roots name a repository a path query finds the way the list names those under them.
+	Roots []string
 }
 
 // RemoteLoader lists a repository's remote-tracking branches, newest commit first. It runs off the input loop; the
@@ -202,8 +217,15 @@ func (s *pickerState) Handle(k tui.Key) bool {
 
 type pickerState struct {
 	// repos backs rows; rows are rebuilt from it as fetched remote branches arrive.
-	repos   []discover.Repo
-	rows    []Row
+	repos []discover.Repo
+	// rows is what the list shows: the repositories, or while browsing what the path query names.
+	rows []Row
+	// browsing is set while the query is a path; listed keeps the repositories' rows meanwhile, and browsed is the
+	// query the rows were read for, so the directory is read again only when the query changes.
+	browsing bool
+	listed   []Row
+	browsed  string
+
 	opts    Options
 	actions Actions
 	query   tui.LineEdit
@@ -245,7 +267,22 @@ const (
 )
 
 func (s *pickerState) refresh() {
-	s.visible = filter(s.rows, s.query.String(), s.show)
+	query := s.query.String()
+	if _, leaf, ok := pathQuery(query); ok {
+		if !s.browsing {
+			s.listed, s.browsing = s.rows, true
+		}
+		if s.browsed != query || s.rows == nil {
+			s.rows, s.browsed = browse(query, s.opts.Roots), query
+		}
+		s.visible = browsed(s.rows, leaf, s.show)
+	} else {
+		if s.browsing {
+			s.rows, s.listed, s.browsing, s.browsed = s.listed, nil, false, ""
+		}
+		s.visible = filter(s.rows, query, s.show)
+	}
+
 	s.cursor = 0
 	s.offset = 0
 	if len(s.visible) > 0 && !s.rows[s.visible[0].index].Targetable() {
@@ -263,7 +300,11 @@ func (s *pickerState) relist(rebuild bool) {
 	}
 
 	if rebuild {
-		s.rows = BuildRows(s.repos)
+		if s.browsing {
+			s.listed = BuildRows(s.repos)
+		} else {
+			s.rows = BuildRows(s.repos)
+		}
 	}
 	s.refresh()
 
@@ -281,7 +322,7 @@ func (s *pickerState) relist(rebuild bool) {
 
 // same reports whether two rows, possibly from different builds of the list, name the same thing.
 func (r Row) same(o Row) bool {
-	return r.Repo == o.Repo && r.Remote == o.Remote && r.Label == o.Label
+	return r.Repo == o.Repo && r.Remote == o.Remote && r.Dir == o.Dir && r.Label == o.Label
 }
 
 // post is called from the fetch goroutines; the wake send is dropped when one is already pending.
@@ -346,7 +387,8 @@ func (s *pickerState) pump() {
 // be: it is the one whose branches are about to be wanted. Runs after every keystroke, so moving the cursor onto another
 // repository moves the fetch with it.
 func (s *pickerState) prioritise() {
-	if s.fetch == nil || s.cursor >= len(s.visible) {
+	// A path query's rows are not the repositories the fetch is indexed by.
+	if s.fetch == nil || s.browsing || s.cursor >= len(s.visible) {
 		return
 	}
 
@@ -469,6 +511,16 @@ func (s *pickerState) handle(k tui.Key) action {
 		s.relist(false)
 
 		return actionNone
+	case k.Is(keys.Folder):
+		// Into a path query from the home directory, or back out of one to the repositories.
+		if s.browsing {
+			s.query.Set("")
+		} else {
+			s.query.Set("~/")
+		}
+		s.refresh()
+
+		return actionNone
 	}
 
 	switch k.Kind {
@@ -485,6 +537,13 @@ func (s *pickerState) handle(k tui.Key) action {
 		}
 
 		return actionSelect
+	case tui.KeyTab:
+		if row := s.selected(); row != nil {
+			if query, ok := completion(s.query.String(), *row); ok {
+				s.query.Set(query)
+				s.refresh()
+			}
+		}
 	case tui.KeyEsc, tui.KeyCtrlC:
 		return actionCancel
 	case tui.KeyUp:
@@ -516,6 +575,10 @@ func (s *pickerState) openFormAt(index int, branch string) {
 	}
 
 	row := s.rows[s.visible[index].index]
+	// A directory has no repository to create a worktree in.
+	if row.Repo == nil {
+		return
+	}
 	s.form, s.zones = newworktree.New(newworktree.Options{
 		Repo:              dialogRepo(row.Repo),
 		Branch:            branch,
@@ -661,7 +724,7 @@ func (s *pickerState) Render(sc *tui.Screen) {
 		frame.Line(s.rowLine(sc, s.visible[index], index == s.cursor, width))
 	}
 
-	footer, zones := sc.Footer(s.err, hints(s.opts.Keys.withDefaults(), s.show.remote), height-1, width)
+	footer, zones := sc.Footer(s.err, hints(s.opts.Keys.withDefaults(), s.show.remote, s.browsing), height-1, width)
 	frame.Bottom(footer)
 	s.zones = append(s.zones, zones...)
 
