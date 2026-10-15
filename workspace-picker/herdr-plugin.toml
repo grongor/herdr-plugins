@@ -1,6 +1,6 @@
 id = "grongor.workspace-picker"
 name = "Workspace Picker"
-version = "0.2.0"
+version = "0.2.1"
 # Needs popup panes with width/height and the global plugin registry.
 min_herdr_version = "0.7.5"
 description = "Pick a git repository or worktree and open it as a workspace"

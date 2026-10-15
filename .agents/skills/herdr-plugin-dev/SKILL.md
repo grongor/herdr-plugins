@@ -1,6 +1,6 @@
 ---
 name: herdr-plugin-dev
-description: Build, link, test, and debug the Herdr plugins in this repository. Use when adding a plugin, editing a herdr-plugin.toml manifest, changing plugin code, or diagnosing a plugin that does not appear or does not run. Covers the manifest contract, the HERDR_* runtime environment, and the link/build/invoke/log loop.
+description: Work that touches Herdr itself in this repository — adding a plugin, editing a herdr-plugin.toml manifest, opening panes or popups, reading HERDR_* variables, changing shared/herdrcli or shared/plugin, running a plugin inside Herdr, or diagnosing one that does not appear or does not run. Covers the build/link/invoke/log loop, testing in a throwaway session, the manifest contract and the runtime environment. Not needed for logic covered by unit tests alone (matching, rendering, config parsing); AGENTS.md holds the rules for every change.
 ---
 
 # Herdr plugin development
@@ -59,9 +59,8 @@ herdr plugin log list --plugin <id>
 Teardown: `herdr session stop pluginlab`, wait for `herdr session list` to read "stopped", then `herdr session delete
 pluginlab`.
 
-If you must act on the live session, prefer `--no-focus` and clean up everything you create (`herdr pane close`, `herdr
-workspace close <id>`). Opening a linked worktree also opens its repository's parent workspace, so that is usually two
-workspaces.
+Never act on the live session (see AGENTS.md). In the throwaway one, opening a linked worktree also opens its
+repository's parent workspace, so cleanup is usually two workspaces.
 
 ## Testing a pane UI without hijacking the session
 

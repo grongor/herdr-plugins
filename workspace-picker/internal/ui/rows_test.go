@@ -227,3 +227,24 @@ func TestQueryRanksPathHitsLast(t *testing.T) {
 		t.Errorf("highlights = %v, want 2811 marked at 9..12", got)
 	}
 }
+
+// TestSlashQueryMatchesAcrossTheRepositoryName pins that "lorem/dolor" finds every lorem repository whose own name
+// mentions test, not only the one where the two are adjacent.
+func TestSlashQueryMatchesAcrossTheRepositoryName(t *testing.T) {
+	repos := []discover.Repo{
+		{Name: "lorem/ipsum-condolor", Anchor: "/p/ipsum-condolor"},
+		{Name: "lorem/dolores", Anchor: "/p/dolores"},
+		{Name: "amet/lorem-dolores", Anchor: "/p/lorem-dolores"},
+	}
+	rows := BuildRows(repos)
+
+	visible := filter(rows, "lorem/dolor", toggles{})
+	got := make([]string, 0, len(visible))
+	for _, v := range visible {
+		got = append(got, rows[v.index].Label)
+	}
+	want := []string{"lorem/dolores", "lorem/ipsum-condolor"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("visible = %q, want %q", got, want)
+	}
+}
