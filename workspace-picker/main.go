@@ -2,6 +2,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strings"
@@ -15,7 +16,10 @@ import (
 	"github.com/grongor/herdr-plugins/workspace-picker/internal/ui"
 )
 
-const version = "0.2.0"
+//go:embed herdr-plugin.toml
+var manifest []byte
+
+var version = plugin.Version(manifest)
 
 // paneEntrypoint matches the [[panes]] id in herdr-plugin.toml.
 const paneEntrypoint = "picker"
