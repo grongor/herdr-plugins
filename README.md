@@ -49,11 +49,13 @@ invocation. Unlike `plugin install`, it does not build — that is what `make bu
 herdr-plugins/
   Makefile                  build / link / check helpers for every module
   docs/authoring-plugins.md how Herdr plugins work, and how to add one here
-  .claude/skills/           the herdr-plugin-dev agent skill for this repository
+  AGENTS.md                 agent instructions (CLAUDE.md links to it)
+  .agents/skills/           the herdr-plugin-dev agent skill (.claude/skills links to it)
   shared/                   the module every plugin is built out of
   <plugin>/
     herdr-plugin.toml       the manifest Herdr reads
     README.md               what it does, how to configure it, how to test it
+    CHANGELOG.md            what changed in each version
     config.example.toml     template for the plugin's user config
     ...                     implementation, one Go module per plugin
 ```
