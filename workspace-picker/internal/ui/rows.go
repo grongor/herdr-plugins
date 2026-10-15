@@ -20,13 +20,19 @@ const remoteMarker = "remote"
 // pathPenalty divides the score of a term found only in a checkout's path.
 const pathPenalty = 2
 
-// Row is one line in the picker: a repository header, or a worktree or remote branch indented under its repository.
+// Row is one line in the picker: a repository header, a worktree or remote branch indented under its repository, or a
+// directory a path query names.
 type Row struct {
+	// Repo is nil for a directory.
 	Repo *discover.Repo
 	// Worktree is nil for the header of a bare repository and for a remote branch.
 	Worktree *discover.Worktree
 	// Remote is the remote-tracking branch a row offers to check out, "origin/topic"; such a row has no Worktree.
 	Remote string
+	// Dir is the directory a path query lists, opened as a workspace of its own; such a row has no Repo.
+	Dir string
+	// CommonDir is set when Dir is the root of a checkout, which then opens as one.
+	CommonDir string
 
 	// Prefix is the tree drawing prefix, empty for repository rows.
 	Prefix string
@@ -42,8 +48,9 @@ type Row struct {
 	group int
 }
 
-// Selectable reports whether Enter does anything on this row: a checkout opens, a remote branch gets a checkout.
-func (r Row) Selectable() bool { return r.Worktree != nil || r.Remote != "" }
+// Selectable reports whether Enter does anything on this row: a checkout or a directory opens, a remote branch gets a
+// checkout.
+func (r Row) Selectable() bool { return r.Worktree != nil || r.Remote != "" || r.Dir != "" }
 
 // Branch is the name a remote branch would be checked out under: "origin/topic" becomes "topic".
 func (r Row) Branch() string { return remoteBranch(r.Remote) }
@@ -57,7 +64,9 @@ func remoteBranch(name string) string {
 
 // Targetable reports whether the cursor can rest here: selectable rows, plus the header of a bare repository with no
 // checkouts yet, where a new worktree can still be created.
-func (r Row) Targetable() bool { return r.Selectable() || len(r.Repo.Worktrees) == 0 }
+func (r Row) Targetable() bool {
+	return r.Selectable() || (r.Repo != nil && len(r.Repo.Worktrees) == 0)
+}
 
 // BuildRows flattens repositories into the display list.
 func BuildRows(repos []discover.Repo) []Row {

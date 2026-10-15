@@ -431,7 +431,7 @@ func TestShortcutsAreConfigurable(t *testing.T) {
 		t.Fatal("the default detached key stopped working")
 	}
 
-	footer, _ := (&tui.Screen{}).HintLine(hints(picker.opts.Keys.withDefaults(), true), 0, 120)
+	footer, _ := (&tui.Screen{}).HintLine(hints(picker.opts.Keys.withDefaults(), true, false), 0, 120)
 	for _, want := range []string{"ctrl-w new worktree", "alt-r local only", "ctrl-t detached"} {
 		if !strings.Contains(footer, want) {
 			t.Errorf("footer %q lacks %q", footer, want)

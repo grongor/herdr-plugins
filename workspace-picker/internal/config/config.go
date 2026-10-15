@@ -37,6 +37,7 @@ type KeysConfig struct {
 	NewWorktree    string `toml:"new_worktree"`
 	RemoteBranches string `toml:"remote_branches"`
 	Detached       string `toml:"detached"`
+	Folder         string `toml:"folder"`
 }
 
 // Shortcuts is the list's shortcuts as keystrokes.
@@ -44,12 +45,14 @@ type Shortcuts struct {
 	NewWorktree    tui.Key
 	RemoteBranches tui.Key
 	Detached       tui.Key
+	Folder         tui.Key
 }
 
 var defaultShortcuts = Shortcuts{
 	NewWorktree:    tui.Ctrl('g'),
 	RemoteBranches: tui.Ctrl('r'),
 	Detached:       tui.Ctrl('t'),
+	Folder:         tui.Ctrl('o'),
 }
 
 // parse fills in the defaults and refuses two actions on one key: the second would be unreachable.
@@ -64,6 +67,7 @@ func (k KeysConfig) parse() (Shortcuts, error) {
 		{"new_worktree", k.NewWorktree, &shortcuts.NewWorktree},
 		{"remote_branches", k.RemoteBranches, &shortcuts.RemoteBranches},
 		{"detached", k.Detached, &shortcuts.Detached},
+		{"folder", k.Folder, &shortcuts.Folder},
 	} {
 		if entry.text == "" {
 			continue
@@ -75,11 +79,12 @@ func (k KeysConfig) parse() (Shortcuts, error) {
 		*entry.key = key
 	}
 
-	seen := make(map[string]string, 3)
+	seen := make(map[string]string, 4)
 	for _, entry := range []struct{ name, key string }{
 		{"new_worktree", shortcuts.NewWorktree.String()},
 		{"remote_branches", shortcuts.RemoteBranches.String()},
 		{"detached", shortcuts.Detached.String()},
+		{"folder", shortcuts.Folder.String()},
 	} {
 		if other, taken := seen[entry.key]; taken {
 			return shortcuts, fmt.Errorf("keys.%s and keys.%s are both %s", other, entry.name, entry.key)

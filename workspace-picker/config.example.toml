@@ -32,3 +32,4 @@ show_remote_branches = false
 new_worktree = "ctrl-g"
 remote_branches = "ctrl-r"
 detached = "ctrl-t"
+folder = "ctrl-o"

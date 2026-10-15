@@ -81,7 +81,9 @@ dumps the socket API schema.
 
 - `id`, `name`, `version`, `min_herdr_version` are required. `min_herdr_version` must be a release you verified — Herdr
   refuses a plugin newer than the running binary.
-- Manifest `version` must equal the `version` const in `main.go`; `manifest_test.go` pins them.
+- Manifest `version` must equal the `version` const in `main.go`; `manifest_test.go` pins them. Every user-facing change
+  bumps it and adds that version's section to the plugin's `CHANGELOG.md` in the same PR: installs track `main`, so a
+  merge is a release.
 - Action / pane / link-handler ids must not contain dots; actions are qualified as `<plugin.id>.<action>`.
 - Declare `platforms`, or linking warns.
 - No `[[startup]]`, `[[events]]` or `[[link_handlers]]` here: `shared/manifesttest` fails if one appears. Adding one is

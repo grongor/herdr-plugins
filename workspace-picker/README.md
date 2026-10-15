@@ -1,7 +1,7 @@
 # workspace-picker
 
 A Herdr plugin that opens a picker over every git repository under your project roots — each repository's
-worktrees nested underneath — and turns the one you choose into a Herdr workspace.
+worktrees nested underneath — and turns the one you choose into a Herdr workspace. A path opens [any folder](#any-folder).
 
 ```
 ❯ store 2478                                                                    2/102
@@ -9,7 +9,7 @@ worktrees nested underneath — and turns the one you choose into a Herdr worksp
 ❯ acme/storefront                                                                main
     └ feature/PROJ-2478-grpc-add-single-correction storefront-PROJ-2478-grpc-add-sin…
 
-enter open · ctrl-g new worktree · ctrl-r remote · ctrl-t detached · ctrl-u clear · esc cancel
+enter open · ctrl-g new worktree · ctrl-r remote · ctrl-t detached · ctrl-o folder · ctrl-u clear · esc cancel
 ```
 
 Every footer entry is clickable. The left column is the repository name (top level) or the branch (nested); the dimmed
@@ -103,7 +103,7 @@ checkouts, and `store 2590` or `2590` finds the branch.
     ├ fix/PROJ-2568-retry-budget                    storefront-PROJ-2568-retry-budget
 ❯   └ origin/feat/PROJ-2590-retry-metrics                                      remote
 
-enter open · ctrl-g new worktree · ctrl-r local only · ctrl-t detached · ctrl-u clear · esc cancel
+enter open · ctrl-g new worktree · ctrl-r local only · ctrl-t detached · ctrl-o folder · ctrl-u clear · esc cancel
 ```
 
 `enter` on a remote branch has nothing to open yet, so it opens the new-worktree dialog with the branch filled in —
@@ -118,6 +118,30 @@ failures are summed up in one footer line once every fetch is done. Nothing is f
 --all --prune` with `fetch` and `fetch_timeout` from [worktree-creator's config](../worktree-creator/config.example.toml),
 the same settings the dialog fetches with, so `fetch = false` lists the refs already on disk without touching the
 network.
+
+## Any folder
+
+A query starting with `/` or `~/` is a path rather than a filter, and the list becomes that directory: the directory
+itself first, then its subdirectories, the ones matching what was typed after the last slash best first. `tab` completes
+the highlighted subdirectory and descends into it; `enter` opens the highlighted row. Hidden directories are listed once
+the name typed starts with a dot. `ctrl-o` starts a path from the home directory, and pressed again goes back to the
+repositories; so does clearing the query.
+
+```
+❯ ~/tmp/                                                                          4/4
+─────────────────────────────────────────────────────────────────────────────────────
+❯ ~/tmp/
+  experiments/
+  scratch/                                                                        git
+  vendor-patch/
+
+enter open · tab complete · ctrl-g new worktree · ctrl-r remote · ctrl-t detached · …
+```
+
+A directory is opened as a plain workspace — `herdr workspace create --cwd <dir>` — unless it is the root of a checkout,
+marked `git`, which opens [as any checkout does](#what-happens-when-you-pick-a-row). A path naming a repository lists
+it as the repository list would, with every checkout under it, so a clone outside your roots opens with its worktree
+identity and `ctrl-g` creates worktrees in it. Remote branches are only listed for the repositories under your roots.
 
 ## Requirements
 
@@ -172,13 +196,14 @@ behind `ctrl-r` is configured in worktree-creator's file, alongside the dialog's
 
 ### Shortcuts
 
-The three list shortcuts can be moved:
+The four list shortcuts can be moved:
 
 ```toml
 [keys]
 new_worktree = "ctrl-g"
 remote_branches = "ctrl-r"
 detached = "ctrl-t"
+folder = "ctrl-o"
 ```
 
 A key is `ctrl-` and a letter or `alt-` and any printable character (`alt-/` works). Letters the terminal or the query
@@ -207,7 +232,7 @@ Without a keybinding: `herdr plugin action invoke grongor.workspace-picker.open`
 
 | Key | Action |
 | --- | --- |
-| type | filter; whitespace splits the query into terms that must all occur, in any order |
+| type | filter; whitespace splits the query into terms that must all occur, in any order; `/` or `~/` first types a [path](#any-folder) |
 | `↑` / `↓`, `ctrl-p` / `ctrl-n` | move between openable rows |
 | `pgup` / `pgdn` | jump ten rows |
 | `←` / `→`, `ctrl-←` / `ctrl-→`, `home` / `end` | move the caret by a character, a word, or to either end |
@@ -217,7 +242,9 @@ Without a keybinding: `herdr plugin action invoke grongor.workspace-picker.open`
 | `ctrl-g` | new worktree in the repository under the cursor — [configurable](#shortcuts) |
 | `ctrl-r` | show or hide remote branches, fetching every repository the first time — configurable; in the dialog's branch list, the same for its bases |
 | `ctrl-t` | show or hide detached checkouts — configurable |
-| `enter` | open the highlighted checkout, or start a checkout of the highlighted remote branch |
+| `ctrl-o` | start a [path](#any-folder) from the home directory, or go back from one to the repositories — configurable |
+| `tab` | in a path, complete the highlighted subdirectory |
+| `enter` | open the highlighted checkout or directory, or start a checkout of the highlighted remote branch |
 | `esc`, `ctrl-c` | cancel |
 
 ## Mouse

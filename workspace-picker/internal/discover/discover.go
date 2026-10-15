@@ -300,3 +300,25 @@ func displayName(anchor string, roots []string, bare bool) string {
 
 	return name
 }
+
+// CommonDir reports the common git directory of the checkout rooted at dir: a main checkout or a linked worktree, not a
+// directory further inside one, and not a submodule.
+func CommonDir(dir string) (string, bool) {
+	commonDir, _ := commonDirAt(dir)
+
+	return commonDir, commonDir != ""
+}
+
+// Load reads the repository dir is the root of — a checkout, linked or main, or a bare repository — with every checkout
+// it has, named as Scan would name it under roots.
+func Load(dir string, roots []string) (Repo, bool) {
+	commonDir, ok := CommonDir(dir)
+	if !ok {
+		if !isGitDir(dir) {
+			return Repo{}, false
+		}
+		commonDir = filepath.Clean(dir)
+	}
+
+	return load(commonDir, roots)
+}

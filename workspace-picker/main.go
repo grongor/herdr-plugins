@@ -15,7 +15,7 @@ import (
 	"github.com/grongor/herdr-plugins/workspace-picker/internal/ui"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 // paneEntrypoint matches the [[panes]] id in herdr-plugin.toml.
 const paneEntrypoint = "picker"
@@ -89,12 +89,22 @@ func runPick() error {
 			NewWorktree: cfg.Shortcuts.NewWorktree,
 			Remote:      cfg.Shortcuts.RemoteBranches,
 			Detached:    cfg.Shortcuts.Detached,
+			Folder:      cfg.Shortcuts.Folder,
 		},
+		Roots: cfg.Roots,
 	}
 
 	return ui.Run(repos, options, ui.Actions{
 		Open: func(row ui.Row) error {
-			_, err := herdrcli.OpenCheckout(row.Repo.CommonDir, row.Worktree.Path)
+			var err error
+			switch {
+			case row.Worktree != nil:
+				_, err = herdrcli.OpenCheckout(row.Repo.CommonDir, row.Worktree.Path)
+			case row.CommonDir != "":
+				_, err = herdrcli.OpenCheckout(row.CommonDir, row.Dir)
+			default:
+				_, err = herdrcli.OpenDirectory(row.Dir)
+			}
 
 			return err
 		},
