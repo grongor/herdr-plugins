@@ -17,10 +17,11 @@ right column is the branch for a repository and the checkout path for a worktree
 `store 2478` narrows straight to one worktree.
 
 Each word of the query has to occur as typed, case aside, and the words can come in any order: `retry fix` or
-`fix/PROJ-2568` finds `fix/PROJ-2568-retry-budget`, `fixretry` does not. Not a subsequence, as fzf matches by default,
-because branch names are full of ticket numbers and a few digits are a subsequence of most of them: `2811` would list
-`PROJ-2481-…` too. A word found only in the checkout path matches but ranks below one found in the name or the branch,
-and a repository lists its best matches first.
+`fix/PROJ-2568` finds `fix/PROJ-2568-retry-budget`, `fixretry` does not. Each side of a slash in a word only has to
+occur somewhere in its segment of the name: `lorem/dolor` finds both `lorem/dolores` and `lorem/ipsum-condolor`. Not a
+subsequence, as fzf matches by default, because branch names are full of ticket numbers and a few digits are a
+subsequence of most of them: `2811` would list `PROJ-2481-…` too. A word found only in the checkout path matches but
+ranks below one found in the name or the branch, and a repository lists its best matches first.
 
 ## New worktrees
 
@@ -232,7 +233,7 @@ Without a keybinding: `herdr plugin action invoke grongor.workspace-picker.open`
 
 | Key | Action |
 | --- | --- |
-| type | filter; whitespace splits the query into terms that must all occur, in any order; `/` or `~/` first types a [path](#any-folder) |
+| type | filter; whitespace splits the query into terms that must all occur, in any order; each side of a `/` in a term may occur anywhere in its segment; `/` or `~/` first types a [path](#any-folder) |
 | `↑` / `↓`, `ctrl-p` / `ctrl-n` | move between openable rows |
 | `pgup` / `pgdn` | jump ten rows |
 | `←` / `→`, `ctrl-←` / `ctrl-→`, `home` / `end` | move the caret by a character, a word, or to either end |

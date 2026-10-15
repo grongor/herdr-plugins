@@ -76,10 +76,10 @@ Herdr's own `new_worktree` (`prefix+shift+g`) stays where it is; this sits besid
 | `ctrl-w`, `ctrl-u` | delete the word before the caret, delete back to the start |
 | `esc`, `ctrl-c` | cancel, having done nothing |
 
-In the branch list: type to filter — each word has to occur in the name, in any order, as in the picker; typing on Base
-opens the list with that character — `↑` / `↓` and `pgup` / `pgdn` to move, `enter` to use the branch, or the filter
-text itself when nothing matches it (a tag, `origin/foo`, a sha), `ctrl-r` to show or hide remote ones, `esc` to go
-back.
+In the branch list: type to filter — each word has to occur in the name, in any order, each side of a `/` anywhere in
+its segment (`feat/2811` finds `feat/PROJ-2811-…`), as in the picker; typing on Base opens the list with that character
+— `↑` / `↓` and `pgup` / `pgdn` to move, `enter` to use the branch, or the filter text itself when nothing matches it (a
+tag, `origin/foo`, a sha), `ctrl-r` to show or hide remote ones, `esc` to go back.
 
 ## Mouse
 

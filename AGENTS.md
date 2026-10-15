@@ -29,3 +29,8 @@ release.
 - The bump adds that version's section to `<plugin>/CHANGELOG.md` (Keep a Changelog: `Added`, `Changed`, `Fixed`, …).
 - A change in `shared/` bumps each plugin whose behaviour it changes, and only those.
 - Bump once per branch, not once per commit.
+
+## Examples
+
+Tests, comments and docs use placeholder names (`lorem/ipsum`, `org/a`, `PROJ-2811`), never real repositories,
+organisations, people or local paths — not even the ones from the report that prompted the change.

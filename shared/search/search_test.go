@@ -15,6 +15,15 @@ func TestMatch(t *testing.T) {
 		{"term does not skip a delimiter", "chore/kafka-test", "chorekafka", false},
 		{"digits must be contiguous", "fix/PROJ-2481-kafka-v1", "2811", false},
 		{"delimiter in the term", "chore/kafka-test", "chore/kafka", true},
+		{"slash parts match in later segments", "lorem/ipsum-condolor", "lorem/dolor", true},
+		{"slash parts sit in adjacent segments", "lorem/ipsum/dolor-amet", "lorem/amet", false},
+		{"slash parts do not cross whitespace", "org/b origin/fix-eat", "org/a", false},
+		{"slash parts match after whitespace", "org/b origin/fix-eat", "origin/eat", true},
+		{"slash parts keep their order", "lorem/ipsum-condolor", "dolor/lorem", false},
+		{"slash parts need separate segments", "amet/lorem-dolores", "lorem/dolor", false},
+		{"slash parts all must match", "lorem/ipsum-condolor", "lorem/amet", false},
+		{"trailing slash adds nothing", "lorem/ipsum-condolor", "lorem/", true},
+		{"lone slash matches the slash", "lorem/ipsum-condolor", "/", true},
 		{"case insensitive", "PROJ-2478", "proj", true},
 		{"terms match in any order", "lorem/ipsum feature/PROJ-2478", "2478 ipsum", true},
 		{"every term must match", "lorem/ipsum feature/PROJ-2478", "2478 dolor", false},
@@ -40,6 +49,7 @@ func TestMatchRanking(t *testing.T) {
 		{"word start beats mid-word", "dolor", "lorem/dolor", "condolor"},
 		{"whole word beats a word prefix", "2811", "fix/PROJ-2811-amet", "fix/PROJ-28110-amet"},
 		{"best occurrence counts", "dolor", "condolores-dolor", "lorem-condolores"},
+		{"slash part on a word start beats mid-word", "lorem/dolor", "lorem/dolores", "lorem/ipsum-condolor"},
 	}
 
 	for _, test := range tests {
@@ -67,6 +77,23 @@ func TestMatchPositions(t *testing.T) {
 		t.Fatal("expected a match")
 	}
 	want := []int{8, 9, 10, 11}
+	if len(result.Positions) != len(want) {
+		t.Fatalf("positions = %v, want %v", result.Positions, want)
+	}
+	for i, position := range want {
+		if result.Positions[i] != position {
+			t.Fatalf("positions = %v, want %v", result.Positions, want)
+		}
+	}
+}
+
+// TestMatchSegmentPositions pins that a slash term marks each part where it matched, not the slash between.
+func TestMatchSegmentPositions(t *testing.T) {
+	result, ok := Match("lorem/ipsum/dolor", "sum/dol")
+	if !ok {
+		t.Fatal("expected a match")
+	}
+	want := []int{8, 9, 10, 12, 13, 14}
 	if len(result.Positions) != len(want) {
 		t.Fatalf("positions = %v, want %v", result.Positions, want)
 	}

@@ -4,6 +4,13 @@ All notable changes to workspace-picker are documented here. The format is based
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the plugin follows
 [Semantic Versioning](https://semver.org).
 
+## [0.2.1] - 2026-10-15
+
+### Fixed
+
+- Each side of a `/` in a query term may occur anywhere in its segment of the name: `lorem/dolor` finds
+  `lorem/ipsum-condolor`, not only `lorem/dolores`.
+
 ## [0.2.0] - 2026-10-15
 
 ### Added
