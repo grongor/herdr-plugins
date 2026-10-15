@@ -58,13 +58,13 @@ func Dir(t *testing.T) string {
 	return filepath.Dir(caller)
 }
 
-// Check runs every manifest check against the plugin in dir. version is the plugin's own version constant.
-func Check(t *testing.T, dir, version string) {
+// Check runs every manifest check against the plugin in dir.
+func Check(t *testing.T, dir string) {
 	t.Helper()
 
 	parsed, meta := load(t, dir)
 
-	t.Run("required fields", func(t *testing.T) { requiredFields(t, parsed, version) })
+	t.Run("required fields", func(t *testing.T) { requiredFields(t, parsed) })
 	t.Run("binary path", func(t *testing.T) { binaryPath(t, parsed) })
 	t.Run("subcommands", func(t *testing.T) { subcommands(t, dir, parsed) })
 	t.Run("ids", func(t *testing.T) { ids(t, parsed) })
@@ -84,7 +84,7 @@ func load(t *testing.T, dir string) (Manifest, toml.MetaData) {
 	return parsed, meta
 }
 
-func requiredFields(t *testing.T, parsed Manifest, version string) {
+func requiredFields(t *testing.T, parsed Manifest) {
 	for _, field := range []struct{ name, value string }{
 		{"id", parsed.ID},
 		{"name", parsed.Name},
@@ -99,10 +99,6 @@ func requiredFields(t *testing.T, parsed Manifest, version string) {
 
 	if !slices.Equal(parsed.Platforms, Platforms) {
 		t.Errorf("platforms = %v, want %v", parsed.Platforms, Platforms)
-	}
-
-	if parsed.Version != version {
-		t.Errorf("%s version = %q, main.go version = %q", FileName, parsed.Version, version)
 	}
 }
 

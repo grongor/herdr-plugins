@@ -2,6 +2,7 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -14,7 +15,10 @@ import (
 	"github.com/grongor/herdr-plugins/shared/worktree"
 )
 
-const version = "0.1.0"
+//go:embed herdr-plugin.toml
+var manifest []byte
+
+var version = plugin.Version(manifest)
 
 const name = "worktree-creator"
 

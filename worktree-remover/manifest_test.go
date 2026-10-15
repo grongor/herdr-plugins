@@ -7,5 +7,5 @@ import (
 )
 
 func TestManifest(t *testing.T) {
-	manifesttest.Check(t, manifesttest.Dir(t), version)
+	manifesttest.Check(t, manifesttest.Dir(t))
 }

@@ -208,9 +208,10 @@ committed root workspace silently joins that build. Measured on a two-module scr
 
 1. `mkdir <plugin>` with `herdr-plugin.toml`, `README.md`, `CHANGELOG.md` and the code. The `[[build]]` fallback is `sh
    ../shared/scripts/build-with-throwaway-go.sh`, the same line as every sibling; it builds `bin/<plugin>` from the
-   directory it is run in.
+   directory it is run in. `main.go` takes its version from the manifest:
+   `//go:embed herdr-plugin.toml` into `var manifest []byte`, then `var version = plugin.Version(manifest)`.
 2. `go mod init github.com/grongor/herdr-plugins/<plugin>`, then add the shared module's `require` and `replace` lines.
-3. `manifest_test.go` is `manifesttest.Check(t, manifesttest.Dir(t), version)` — it covers the manifest, the build
+3. `manifest_test.go` is `manifesttest.Check(t, manifesttest.Dir(t))` — it covers the manifest, the build
    command, the fallback script and the dispatch switch.
 4. Add the directory to `PLUGINS` in the `Makefile`.
 5. `make build && make link`.

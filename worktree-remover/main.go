@@ -2,6 +2,7 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,7 +19,10 @@ import (
 	"github.com/grongor/herdr-plugins/worktree-remover/internal/ui"
 )
 
-const version = "0.1.0"
+//go:embed herdr-plugin.toml
+var manifest []byte
+
+var version = plugin.Version(manifest)
 
 const name = "worktree-remover"
 
